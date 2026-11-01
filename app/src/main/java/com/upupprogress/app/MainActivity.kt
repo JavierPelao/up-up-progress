@@ -1,5 +1,8 @@
 package com.upupprogress.app
 
+import com.upupprogress.app.ui.screens.home.HomeScreen
+
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -20,9 +23,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             UpUpProgressTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Up up Progress",
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    containerColor = MaterialTheme.colorScheme.background
+                ) { innerPadding ->
+                    HomeScreen(
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
