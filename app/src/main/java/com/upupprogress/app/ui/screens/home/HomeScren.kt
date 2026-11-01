@@ -109,7 +109,7 @@ private fun WorkoutTodayCard(
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             ) {
-                Text("Ver rutina y registrar")
+                Text("Ver rutina y registrarr")
             }
         }
     }
