@@ -1,6 +1,20 @@
 package com.upupprogress.app
 
 import com.upupprogress.app.ui.screens.home.HomeScreen
+import com.upupprogress.app.ui.screens.login.LoginScreen
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 
 
 import android.os.Bundle
@@ -23,13 +37,59 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             UpUpProgressTheme {
+                var showHomePreview by rememberSaveable { mutableStateOf(false) }
+                val snackbarHostState = remember { SnackbarHostState() }
+                val scope = rememberCoroutineScope()
+
+                fun showPendingFeature(message: String) {
+                    scope.launch {
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar(message)
+                    }
+                }
+
+                BackHandler(enabled = showHomePreview) {
+                    showHomePreview = false
+                }
+
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
-                    containerColor = MaterialTheme.colorScheme.background
+                    containerColor = MaterialTheme.colorScheme.background,
+                    snackbarHost = { SnackbarHost(snackbarHostState) }
                 ) { innerPadding ->
-                    HomeScreen(
-                        modifier = Modifier.padding(innerPadding)
-                    )
+                    val screenModifier = Modifier
+                        .padding(innerPadding)
+                        .consumeWindowInsets(innerPadding)
+
+                    if (showHomePreview) {
+                        Column(modifier = screenModifier.fillMaxSize()) {
+                            TextButton(onClick = { showHomePreview = false }) {
+                                Text("← Volver al Login")
+                            }
+                            HomeScreen(modifier = Modifier.weight(1f))
+                        }
+                    } else {
+                        LoginScreen(
+                            modifier = screenModifier,
+                            onSignIn = { _, _ ->
+                                // TODO: Conectar Supabase Auth y navegar tras autenticar.
+                                showPendingFeature(
+                                    "El inicio de sesión estará disponible próximamente."
+                                )
+                            },
+                            onForgotPassword = {
+                                showPendingFeature(
+                                    "La recuperación de contraseña estará disponible próximamente."
+                                )
+                            },
+                            onCreateAccount = {
+                                showPendingFeature(
+                                    "La creación de cuentas estará disponible próximamente."
+                                )
+                            },
+                            onPreviewHome = { showHomePreview = true }
+                        )
+                    }
                 }
             }
         }
