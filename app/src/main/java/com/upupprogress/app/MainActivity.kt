@@ -1,6 +1,9 @@
 package com.upupprogress.app
 
 import com.upupprogress.app.ui.screens.home.HomeScreen
+import com.upupprogress.app.ui.screens.training.TrainingScreen
+import com.upupprogress.app.ui.components.AppBottomBar
+import com.upupprogress.app.ui.components.AppDestination
 import com.upupprogress.app.ui.screens.login.LoginScreen
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
@@ -13,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 
@@ -38,6 +42,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             UpUpProgressTheme {
                 var showHomePreview by rememberSaveable { mutableStateOf(false) }
+                var selectedDestination by rememberSaveable {
+                    mutableStateOf(AppDestination.HOME)
+                }
+                val tabStateHolder = rememberSaveableStateHolder()
                 val snackbarHostState = remember { SnackbarHostState() }
                 val scope = rememberCoroutineScope()
 
@@ -49,13 +57,34 @@ class MainActivity : ComponentActivity() {
                 }
 
                 BackHandler(enabled = showHomePreview) {
-                    showHomePreview = false
+                    if (selectedDestination != AppDestination.HOME) {
+                        selectedDestination = AppDestination.HOME
+                    } else {
+                        showHomePreview = false
+                    }
                 }
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     containerColor = MaterialTheme.colorScheme.background,
-                    snackbarHost = { SnackbarHost(snackbarHostState) }
+                    snackbarHost = { SnackbarHost(snackbarHostState) },
+                    bottomBar = {
+                        if (showHomePreview) {
+                            AppBottomBar(
+                                selectedDestination = selectedDestination,
+                                onDestinationSelected = { destination ->
+                                    when (destination) {
+                                        AppDestination.HOME, AppDestination.TRAINING ->
+                                            selectedDestination = destination
+                                        AppDestination.NUTRITION ->
+                                            showPendingFeature("Nutrición estará disponible próximamente.")
+                                        AppDestination.PROGRESS ->
+                                            showPendingFeature("Progreso estará disponible próximamente.")
+                                    }
+                                }
+                            )
+                        }
+                    }
                 ) { innerPadding ->
                     val screenModifier = Modifier
                         .padding(innerPadding)
@@ -66,7 +95,27 @@ class MainActivity : ComponentActivity() {
                             TextButton(onClick = { showHomePreview = false }) {
                                 Text("← Volver al Login")
                             }
-                            HomeScreen(modifier = Modifier.weight(1f))
+                            tabStateHolder.SaveableStateProvider(selectedDestination.name) {
+                                when (selectedDestination) {
+                                    AppDestination.HOME ->
+                                        HomeScreen(modifier = Modifier.weight(1f))
+                                    AppDestination.TRAINING ->
+                                        TrainingScreen(
+                                            modifier = Modifier.weight(1f),
+                                            onCreateRoutine = {
+                                                showPendingFeature(
+                                                    "La creación de rutinas estará disponible próximamente."
+                                                )
+                                            },
+                                            onViewRoutine = { _, _ ->
+                                                showPendingFeature(
+                                                    "El registro del entrenamiento estará disponible próximamente."
+                                                )
+                                            }
+                                        )
+                                    AppDestination.NUTRITION, AppDestination.PROGRESS -> Unit
+                                }
+                            }
                         }
                     } else {
                         LoginScreen(
@@ -87,7 +136,10 @@ class MainActivity : ComponentActivity() {
                                     "La creación de cuentas estará disponible próximamente."
                                 )
                             },
-                            onPreviewHome = { showHomePreview = true }
+                            onPreviewHome = {
+                                selectedDestination = AppDestination.HOME
+                                showHomePreview = true
+                            }
                         )
                     }
                 }
