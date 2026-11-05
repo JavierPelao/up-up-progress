@@ -5,6 +5,10 @@ import com.upupprogress.app.ui.screens.training.TrainingScreen
 import com.upupprogress.app.ui.components.AppBottomBar
 import com.upupprogress.app.ui.components.AppDestination
 import com.upupprogress.app.ui.screens.login.LoginScreen
+import com.upupprogress.app.ui.screens.login.LoginViewModel
+import androidx.activity.viewModels
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -36,12 +40,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.upupprogress.app.ui.theme.UpUpProgressTheme
 
 class MainActivity : ComponentActivity() {
+    private val loginViewModel: LoginViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             UpUpProgressTheme {
-                var showHomePreview by rememberSaveable { mutableStateOf(false) }
+                val loginState by loginViewModel.uiState.collectAsStateWithLifecycle()
                 var selectedDestination by rememberSaveable {
                     mutableStateOf(AppDestination.HOME)
                 }
@@ -56,12 +62,27 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                BackHandler(enabled = showHomePreview) {
-                    if (selectedDestination != AppDestination.HOME) {
+                LaunchedEffect(loginState.isAuthenticated) {
+                    if (!loginState.isAuthenticated) {
                         selectedDestination = AppDestination.HOME
-                    } else {
-                        showHomePreview = false
+                        AppDestination.entries.forEach { tabStateHolder.removeState(it.name) }
+                        snackbarHostState.currentSnackbarData?.dismiss()
                     }
+                }
+
+                LaunchedEffect(loginState.isAuthenticated, loginState.errorMessage) {
+                    val message = loginState.errorMessage
+                    if (loginState.isAuthenticated && message != null) {
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar(message)
+                    }
+                }
+
+                BackHandler(
+                    enabled = loginState.isAuthenticated &&
+                        selectedDestination != AppDestination.HOME
+                ) {
+                    selectedDestination = AppDestination.HOME
                 }
 
                 Scaffold(
@@ -69,7 +90,7 @@ class MainActivity : ComponentActivity() {
                     containerColor = MaterialTheme.colorScheme.background,
                     snackbarHost = { SnackbarHost(snackbarHostState) },
                     bottomBar = {
-                        if (showHomePreview) {
+                        if (loginState.isAuthenticated) {
                             AppBottomBar(
                                 selectedDestination = selectedDestination,
                                 onDestinationSelected = { destination ->
@@ -90,9 +111,12 @@ class MainActivity : ComponentActivity() {
                         .padding(innerPadding)
                         .consumeWindowInsets(innerPadding)
 
-                    if (showHomePreview) {
+                    if (loginState.isAuthenticated) {
                         Column(modifier = screenModifier.fillMaxSize()) {
-                            TextButton(onClick = { showHomePreview = false }) {
+                            TextButton(
+                                onClick = loginViewModel::signOut,
+                                enabled = !loginState.isLoading
+                            ) {
                                 Text("← Volver al Login")
                             }
                             tabStateHolder.SaveableStateProvider(selectedDestination.name) {
@@ -120,12 +144,9 @@ class MainActivity : ComponentActivity() {
                     } else {
                         LoginScreen(
                             modifier = screenModifier,
-                            onSignIn = { _, _ ->
-                                // TODO: Conectar Supabase Auth y navegar tras autenticar.
-                                showPendingFeature(
-                                    "El inicio de sesión estará disponible próximamente."
-                                )
-                            },
+                            onSignIn = loginViewModel::signIn,
+                            isLoading = loginState.isLoading,
+                            errorMessage = loginState.errorMessage,
                             onForgotPassword = {
                                 showPendingFeature(
                                     "La recuperación de contraseña estará disponible próximamente."
@@ -137,8 +158,9 @@ class MainActivity : ComponentActivity() {
                                 )
                             },
                             onPreviewHome = {
-                                selectedDestination = AppDestination.HOME
-                                showHomePreview = true
+                                showPendingFeature(
+                                    "Inicia sesión para acceder al menú principal."
+                                )
                             }
                         )
                     }

@@ -1,7 +1,30 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
+
+val supabaseProperties = Properties().apply {
+    val propertiesFile = rootProject.file("supabase.properties")
+
+    check(propertiesFile.exists()) {
+        "Falta el archivo supabase.properties"
+    }
+
+    propertiesFile.inputStream().use { load(it) }
+}
+
+val supabaseUrl = supabaseProperties
+    .getProperty("SUPABASE_URL")
+    ?.takeIf { it.isNotBlank() }
+    ?: error("Falta SUPABASE_URL")
+
+val supabasePublicKey = supabaseProperties
+    .getProperty("SUPABASE_PUBLIC_KEY")
+    ?.takeIf { it.isNotBlank() }
+    ?: error("Falta SUPABASE_PUBLIC_KEY")
 
 android {
     namespace = "com.upupprogress.app"
@@ -17,6 +40,18 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField(
+            "String",
+            "SUPABASE_URL",
+            "\"$supabaseUrl\""
+        )
+
+        buildConfigField(
+            "String",
+            "SUPABASE_PUBLIC_KEY",
+            "\"$supabasePublicKey\""
+        )
     }
 
     buildTypes {
@@ -33,6 +68,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -45,6 +81,11 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.auth)
+    implementation(libs.ktor.client.okhttp)
+
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
