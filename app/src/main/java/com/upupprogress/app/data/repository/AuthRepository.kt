@@ -27,7 +27,28 @@ class AuthRepository {
         }
     }
 
+    suspend fun signUp(email: String, password: String): RegistrationResult {
+        val user = supabase.auth.signUpWith(Email) {
+            this.email = email.trim()
+            this.password = password
+        }
+
+        if (user != null) {
+            return RegistrationResult.EmailConfirmationRequired
+        }
+
+        check(sessionStatus.value is SessionStatus.Authenticated) {
+            "No se obtuvo una sesión después del registro"
+        }
+        return RegistrationResult.SessionStarted
+    }
+
     suspend fun signOut() {
         supabase.auth.signOut()
     }
+}
+
+sealed interface RegistrationResult {
+    data object EmailConfirmationRequired : RegistrationResult
+    data object SessionStarted : RegistrationResult
 }

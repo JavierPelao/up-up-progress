@@ -6,6 +6,8 @@ import com.upupprogress.app.ui.components.AppBottomBar
 import com.upupprogress.app.ui.components.AppDestination
 import com.upupprogress.app.ui.screens.login.LoginScreen
 import com.upupprogress.app.ui.screens.login.LoginViewModel
+import com.upupprogress.app.ui.screens.registration.RegistrationScreen
+import com.upupprogress.app.ui.screens.registration.RegistrationViewModel
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -41,6 +43,7 @@ import com.upupprogress.app.ui.theme.UpUpProgressTheme
 
 class MainActivity : ComponentActivity() {
     private val loginViewModel: LoginViewModel by viewModels()
+    private val registrationViewModel: RegistrationViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,6 +51,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             UpUpProgressTheme {
                 val loginState by loginViewModel.uiState.collectAsStateWithLifecycle()
+                val registrationState by registrationViewModel.uiState.collectAsStateWithLifecycle()
+                var showRegistration by rememberSaveable { mutableStateOf(false) }
                 var selectedDestination by rememberSaveable {
                     mutableStateOf(AppDestination.HOME)
                 }
@@ -63,7 +68,9 @@ class MainActivity : ComponentActivity() {
                 }
 
                 LaunchedEffect(loginState.isAuthenticated) {
-                    if (!loginState.isAuthenticated) {
+                    if (loginState.isAuthenticated) {
+                        showRegistration = false
+                    } else {
                         selectedDestination = AppDestination.HOME
                         AppDestination.entries.forEach { tabStateHolder.removeState(it.name) }
                         snackbarHostState.currentSnackbarData?.dismiss()
@@ -76,6 +83,11 @@ class MainActivity : ComponentActivity() {
                         snackbarHostState.currentSnackbarData?.dismiss()
                         snackbarHostState.showSnackbar(message)
                     }
+                }
+
+                BackHandler(enabled = !loginState.isAuthenticated && showRegistration) {
+                    registrationViewModel.reset()
+                    showRegistration = false
                 }
 
                 BackHandler(
@@ -141,6 +153,18 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
+                    } else if (showRegistration) {
+                        RegistrationScreen(
+                            modifier = screenModifier,
+                            onSignUp = registrationViewModel::signUp,
+                            onBackToLogin = {
+                                registrationViewModel.reset()
+                                showRegistration = false
+                            },
+                            isLoading = registrationState.isLoading,
+                            errorMessage = registrationState.errorMessage,
+                            result = registrationState.result
+                        )
                     } else {
                         LoginScreen(
                             modifier = screenModifier,
@@ -153,9 +177,8 @@ class MainActivity : ComponentActivity() {
                                 )
                             },
                             onCreateAccount = {
-                                showPendingFeature(
-                                    "La creación de cuentas estará disponible próximamente."
-                                )
+                                registrationViewModel.reset()
+                                showRegistration = true
                             },
                             onPreviewHome = {
                                 showPendingFeature(
