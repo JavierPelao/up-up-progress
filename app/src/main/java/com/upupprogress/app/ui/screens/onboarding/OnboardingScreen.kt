@@ -1,277 +1,139 @@
 package com.upupprogress.app.ui.screens.onboarding
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.upupprogress.app.ui.theme.UpUpProgressTheme
 
-// Conserva el borrador de la interfaz al recrearse la pantalla. No guarda datos en Supabase.
-private val OnboardingFormSaver = listSaver<OnboardingFormState, Any>(
+internal val OnboardingFormSaver = listSaver<OnboardingFormState, Any>(
     save = { it.toSavedValues() },
-    restore = { restoreOnboardingForm(it) }
+    restore = { restoreOnboardingForm(it) },
 )
 
-/** Formulario con modalidades nutricionales y validación local, sin guardado ni navegación. */
+/** Pasos visuales del mismo borrador. Solo el último paso permite confirmar. */
 @Composable
-fun OnboardingScreen(modifier: Modifier = Modifier) {
-    var form by rememberSaveable(stateSaver = OnboardingFormSaver) {
-        mutableStateOf(OnboardingFormState())
-    }
-    var validationAttempted by rememberSaveable { mutableStateOf(false) }
+fun OnboardingScreen(
+    form: OnboardingFormState,
+    onFormChange: (OnboardingFormState) -> Unit,
+    step: OnboardingStep,
+    onStepChange: (OnboardingStep) -> Unit,
+    onBackToAccount: () -> Unit,
+    onConfirm: (OnboardingFormState) -> Unit,
+    modifier: Modifier = Modifier,
+    email: String = "",
+    onEditAccount: () -> Unit = onBackToAccount,
+    isLoading: Boolean = false,
+    errorMessage: String? = null,
+) {
+    var attempted by rememberSaveable(step) { mutableStateOf(false) }
+    var editingSection by rememberSaveable { mutableStateOf<OnboardingStep?>(null) }
     var numberPickerKey by rememberSaveable { mutableStateOf<String?>(null) }
-    val errors = if (validationAttempted) validateOnboardingForm(form) else emptyMap()
+    val errors = if (attempted) validateOnboardingStep(form, step) else emptyMap()
     val focusManager = LocalFocusManager.current
-    val keyboardController = LocalSoftwareKeyboardController.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val scroll = rememberScrollState()
 
-    fun openNumberPicker(field: OnboardingNumberField) {
+    fun closeKeyboard() {
         focusManager.clearFocus()
-        keyboardController?.hide()
+        keyboard?.hide()
+    }
+    fun goBack() {
+        closeKeyboard()
+        when {
+            editingSection != null -> editingSection = null
+            step == OnboardingStep.PERSONAL -> onBackToAccount()
+            else -> onStepChange(OnboardingStep.entries[step.ordinal - 1])
+        }
+    }
+    fun openPicker(field: OnboardingNumberField) {
+        closeKeyboard()
         numberPickerKey = field.name
+    }
+    BackHandler(enabled = !isLoading) { goBack() }
+    LaunchedEffect(step) {
+        closeKeyboard()
+        scroll.scrollTo(0)
     }
 
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .safeDrawingPadding()
-            .imePadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+            .safeDrawingPadding().imePadding().verticalScroll(scroll)
+            .padding(horizontal = 20.dp, vertical = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Column(
-            modifier = Modifier.widthIn(max = 440.dp).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "↑",
-                        modifier = Modifier.clearAndSetSemantics {},
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
-                Text(
-                    "Up Up Progress!",
-                    fontSize = 22.sp,
-                    lineHeight = 28.sp,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "Configuración inicial",
-                    modifier = Modifier.semantics { heading() },
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    "Cuéntanos sobre ti para preparar tu perfil y tus metas.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "Los campos con * son obligatorios.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            OnboardingSection("Datos personales") {
-                OutlinedTextField(
-                    value = form.name,
-                    onValueChange = { form = form.copy(name = it) },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Nombre *") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.Words,
-                        imeAction = ImeAction.Done
-                    ),
-                    keyboardActions = KeyboardActions(onDone = {
-                        focusManager.clearFocus()
-                        keyboardController?.hide()
-                    }),
-                    isError = errors[OnboardingField.NAME] != null,
-                    supportingText = errors[OnboardingField.NAME]?.let { { Text(it) } },
-                    shape = RoundedCornerShape(12.dp)
-                )
-                Text("Sexo biológico para la fórmula *", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "Se utiliza únicamente para elegir los coeficientes disponibles de la ecuación Mifflin–St Jeor.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth().selectableGroup(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FormulaSexUi.entries.forEach { option ->
-                        FilterChip(
-                            selected = form.sexForFormula == option,
-                            onClick = { form = form.copy(sexForFormula = option) },
-                            label = { Text(option.label) },
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
-                        )
+        Column(modifier = Modifier.widthIn(max = 440.dp).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            LinearProgressIndicator(
+                progress = { (step.ordinal + 2) / 6f },
+                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
+                    .semantics { contentDescription = "Paso ${step.ordinal + 2} de 6" },
+            )
+            Text(step.title, style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.semantics { heading() })
+            Text(step.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (isLoading) {
+                CircularProgressIndicator()
+                Text("Creando tu cuenta…", modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            } else {
+                if (step == OnboardingStep.REVIEW) {
+                    OnboardingReview(form, email, errors, editingSection,
+                        onEditSection = { closeKeyboard(); editingSection = it },
+                        onEditAccount = onEditAccount,
+                        onFormChange = onFormChange,
+                        openNumberPicker = ::openPicker)
+                } else {
+                    OnboardingSection(step.title) {
+                        OnboardingStepFields(step, form, errors, onFormChange, ::openPicker)
                     }
                 }
-                FieldError(errors[OnboardingField.FORMULA_SEX])
-                NumericSelection(
-                    label = "Edad (años) *",
-                    value = form.ageYears?.let { "$it años" },
-                    errorMessage = errors[OnboardingField.AGE],
-                    onClick = { openNumberPicker(OnboardingNumberField.AGE) }
-                )
-                NumericSelection(
-                    label = "Estatura (cm) *",
-                    value = form.heightCm?.let { "$it cm" },
-                    errorMessage = errors[OnboardingField.HEIGHT],
-                    onClick = { openNumberPicker(OnboardingNumberField.HEIGHT) }
-                )
-                NumericSelection(
-                    label = "Peso (kg) *",
-                    value = form.weightHundredthsKg?.let { "${formatOnboardingWeight(it)} kg" },
-                    errorMessage = errors[OnboardingField.WEIGHT],
-                    onClick = { openNumberPicker(OnboardingNumberField.WEIGHT) }
-                )
-            }
-
-            OnboardingSection("Actividad y objetivo") {
-                Text("Actividad física *", style = MaterialTheme.typography.bodyMedium)
-                Column(
-                    modifier = Modifier.selectableGroup(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ActivityLevelUi.entries.forEach { option ->
-                        SingleChoiceOption(
-                            label = option.label,
-                            selected = form.activityLevel == option,
-                            onClick = { form = form.copy(activityLevel = option) }
-                        )
-                    }
+                errorMessage?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                 }
-                FieldError(errors[OnboardingField.ACTIVITY])
-                Text("Objetivo personal *", style = MaterialTheme.typography.bodyMedium)
-                Column(
-                    modifier = Modifier.selectableGroup(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    PersonalGoalUi.entries.forEach { option ->
-                        SingleChoiceOption(
-                            label = option.label,
-                            selected = form.personalGoal == option,
-                            onClick = { form = form.copy(personalGoal = option) }
-                        )
-                    }
+                if (errors.isNotEmpty()) Text("Revisa los campos indicados antes de continuar.",
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                if (step == OnboardingStep.REVIEW) {
+                    Text("Por ahora solo se creará tu cuenta. Los datos personales y las metas aún no se guardarán.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                FieldError(errors[OnboardingField.GOAL])
-            }
-
-            OnboardingSection("Configuración nutricional") {
-                OnboardingNutritionFields(
-                    form = form,
-                    errors = errors,
-                    onModeSelected = { form = form.copy(nutritionGoalMode = it) },
-                    onManualSetupSelected = { form = form.copy(manualGoalsSetup = it) },
-                    onManualInputChanged = { field, value ->
-                        form = form.copy(
-                            manualNutritionDraft = form.manualNutritionDraft.withValue(field, value)
-                        )
-                    }
-                )
-            }
-
-            Button(
-                onClick = {
-                    focusManager.clearFocus()
-                    keyboardController?.hide()
-                    validationAttempted = true
-                },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) { Text("Revisar datos") }
-            if (validationAttempted) {
-                Text(
-                    text = when {
-                        errors.isNotEmpty() ->
-                            "Revisa los campos indicados. Los datos todavía no se han guardado."
-                        form.nutritionGoalMode == NutritionGoalModeUi.AUTOMATIC ->
-                            "Datos revisados. Las metas mostradas son estimadas y todavía no se han guardado."
-                        form.manualGoalsSetup == ManualGoalsSetupUi.LATER ->
-                            "Datos revisados. Tus metas siguen pendientes. La configuración todavía no se ha guardado."
-                        else -> "Datos revisados. Tus metas manuales todavía no se han guardado."
+                Button(
+                    onClick = {
+                        closeKeyboard()
+                        attempted = true
+                        if (validateOnboardingStep(form, step).isEmpty()) {
+                            if (step == OnboardingStep.REVIEW) onConfirm(form)
+                            else onStepChange(OnboardingStep.entries[step.ordinal + 1])
+                        } else if (step == OnboardingStep.REVIEW) {
+                            editingSection = firstStepWithErrors(form)?.takeIf { it != OnboardingStep.REVIEW }
+                        }
                     },
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (errors.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant
-                        else MaterialTheme.colorScheme.error
-                )
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                    shape = RoundedCornerShape(12.dp),
+                ) { Text(if (step == OnboardingStep.REVIEW) "Confirmar y crear cuenta" else "Continuar") }
             }
         }
     }
-
     OnboardingNumberField.entries.firstOrNull { it.name == numberPickerKey }?.let { field ->
         OnboardingNumberPicker(
             field = field,
@@ -282,19 +144,19 @@ fun OnboardingScreen(modifier: Modifier = Modifier) {
             },
             onDismiss = { numberPickerKey = null },
             onValueSelected = { value ->
-                form = when (field) {
+                onFormChange(when (field) {
                     OnboardingNumberField.AGE -> form.copy(ageYears = value)
                     OnboardingNumberField.HEIGHT -> form.copy(heightCm = value)
                     OnboardingNumberField.WEIGHT -> form.copy(weightHundredthsKg = value)
-                }
+                })
                 numberPickerKey = null
-            }
+            },
         )
     }
 }
 
 @Composable
-private fun OnboardingSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+internal fun OnboardingSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
@@ -316,7 +178,7 @@ private fun OnboardingSection(title: String, content: @Composable ColumnScope.()
 }
 
 @Composable
-private fun NumericSelection(
+internal fun NumericSelection(
     label: String,
     value: String?,
     errorMessage: String?,
@@ -339,7 +201,7 @@ private fun NumericSelection(
 }
 
 @Composable
-internal fun SingleChoiceOption(label: String, selected: Boolean, onClick: () -> Unit) {
+internal fun SingleChoiceOption(label: String, selected: Boolean, description: String? = null, onClick: () -> Unit) {
     val shape = RoundedCornerShape(12.dp)
     Row(
         modifier = Modifier
@@ -354,7 +216,11 @@ internal fun SingleChoiceOption(label: String, selected: Boolean, onClick: () ->
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         RadioButton(selected = selected, onClick = null)
-        Text(label, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface)
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(label, color = MaterialTheme.colorScheme.onSurface)
+            description?.let { Text(it, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
     }
 }
 
@@ -365,9 +231,36 @@ internal fun FieldError(message: String?) {
     }
 }
 
-@Preview(name = "Onboarding - Pixel 7", device = Devices.PIXEL_7, showSystemUi = true, locale = "es-rCL")
-@Preview(name = "Onboarding - texto grande", device = Devices.PIXEL_7, showSystemUi = true, fontScale = 1.3f, locale = "es-rCL")
+
+@Preview(name = "Datos personales - Pixel 7", device = Devices.PIXEL_7, showSystemUi = true, locale = "es-rCL")
+@Preview(name = "Datos personales - texto grande", device = Devices.PIXEL_7, fontScale = 1.3f, showSystemUi = true)
 @Composable
 private fun OnboardingPreview() {
-    UpUpProgressTheme { OnboardingScreen() }
+    OnboardingStepPreview(OnboardingStep.PERSONAL)
+}
+
+@Preview(name = "Actividad física - Pixel 7", device = Devices.PIXEL_7, showSystemUi = true, locale = "es-rCL")
+@Composable
+private fun ActivityStepPreview() { OnboardingStepPreview(OnboardingStep.ACTIVITY) }
+
+@Preview(name = "Resumen editable - Pixel 7", device = Devices.PIXEL_7, showSystemUi = true, locale = "es-rCL")
+@Composable
+private fun ReviewStepPreview() { OnboardingStepPreview(OnboardingStep.REVIEW) }
+
+@Composable
+private fun OnboardingStepPreview(initialStep: OnboardingStep) {
+    var form by rememberSaveable(stateSaver = OnboardingFormSaver) {
+        mutableStateOf(OnboardingFormState(name = "Ejemplo", sexForFormula = FormulaSexUi.FEMALE,
+            ageYears = 34, heightCm = 162, weightHundredthsKg = 6050,
+            activityLevel = ActivityLevelUi.LIGHTLY_ACTIVE, personalGoal = PersonalGoalUi.LOSE_WEIGHT,
+            nutritionGoalMode = NutritionGoalModeUi.AUTOMATIC))
+    }
+    var step by rememberSaveable { mutableStateOf(initialStep) }
+    var reviewed by remember { mutableStateOf(false) }
+    UpUpProgressTheme {
+        OnboardingScreen(form, { form = it }, step, { step = it }, {},
+            onConfirm = { reviewed = true },
+            email = "ejemplo@correo.cl",
+            errorMessage = if (reviewed) "Revisión local completada. No se han enviado datos." else null)
+    }
 }

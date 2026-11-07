@@ -41,7 +41,6 @@ internal fun OnboardingNutritionFields(
     form: OnboardingFormState,
     errors: Map<OnboardingField, String>,
     onModeSelected: (NutritionGoalModeUi) -> Unit,
-    onManualSetupSelected: (ManualGoalsSetupUi) -> Unit,
     onManualInputChanged: (ManualNutritionField, String) -> Unit
 ) {
     val focusManager = LocalFocusManager.current
@@ -81,68 +80,40 @@ internal fun OnboardingNutritionFields(
             result = form.automaticNutritionResultOrNull()
         )
         NutritionGoalModeUi.MANUAL -> {
-            Text("¿Cuándo quieres configurar tus metas? *", style = MaterialTheme.typography.bodyMedium)
-            Column(
-                modifier = Modifier.selectableGroup(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ManualGoalsSetupUi.entries.forEach { option ->
-                    SingleChoiceOption(
-                        label = option.label,
-                        selected = form.manualGoalsSetup == option,
-                        onClick = {
-                            closeKeyboard()
-                            onManualSetupSelected(option)
+            val draftErrors = validateManualNutritionDraft(form.manualNutritionDraft)
+            ManualNutritionField.entries.forEach { field ->
+                val value = form.manualNutritionDraft[field]
+                val error = errors[field.toOnboardingField()]
+                    ?: draftErrors[field].takeIf { value.isNotEmpty() }
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { edited ->
+                        if (acceptsManualNutritionEdit(field, edited)) {
+                            onManualInputChanged(field, edited)
                         }
-                    )
-                }
-            }
-            FieldError(errors[OnboardingField.MANUAL_SETUP])
-
-            when (form.manualGoalsSetup) {
-                null -> Unit
-                ManualGoalsSetupUi.LATER -> Text(
-                    PENDING_NUTRITION_GOALS_MESSAGE,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("${field.label} (${field.unit}) *") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        autoCorrectEnabled = false,
+                        keyboardType = if (field == ManualNutritionField.CALORIES) {
+                            KeyboardType.Number
+                        } else KeyboardType.Decimal,
+                        imeAction = if (field == ManualNutritionField.FAT) ImeAction.Done
+                            else ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { closeKeyboard() }),
+                    isError = error != null,
+                    supportingText = {
+                        Text(error ?: if (field == ManualNutritionField.CALORIES) {
+                            "De ${ManualNutritionInputLimits.MIN_CALORIES_KCAL} a ${ManualNutritionInputLimits.MAX_CALORIES_KCAL} kcal, sin decimales."
+                        } else {
+                            "De 0 a ${ManualNutritionInputLimits.MAX_MACRO_GRAMS} g. Hasta dos decimales, con coma o punto."
+                        })
+                    },
+                    shape = RoundedCornerShape(12.dp)
                 )
-                ManualGoalsSetupUi.NOW -> {
-                    val draftErrors = validateManualNutritionDraft(form.manualNutritionDraft)
-                    ManualNutritionField.entries.forEach { field ->
-                        val value = form.manualNutritionDraft[field]
-                        val error = errors[field.toOnboardingField()]
-                            ?: draftErrors[field].takeIf { value.isNotEmpty() }
-                        OutlinedTextField(
-                            value = value,
-                            onValueChange = { edited ->
-                                if (acceptsManualNutritionEdit(field, edited)) {
-                                    onManualInputChanged(field, edited)
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("${field.label} (${field.unit}) *") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(
-                                autoCorrectEnabled = false,
-                                keyboardType = if (field == ManualNutritionField.CALORIES) {
-                                    KeyboardType.Number
-                                } else KeyboardType.Decimal,
-                                imeAction = if (field == ManualNutritionField.FAT) ImeAction.Done
-                                    else ImeAction.Next
-                            ),
-                            keyboardActions = KeyboardActions(onDone = { closeKeyboard() }),
-                            isError = error != null,
-                            supportingText = {
-                                Text(error ?: if (field == ManualNutritionField.CALORIES) {
-                                    "De ${ManualNutritionInputLimits.MIN_CALORIES_KCAL} a ${ManualNutritionInputLimits.MAX_CALORIES_KCAL} kcal, sin decimales."
-                                } else {
-                                    "De 0 a ${ManualNutritionInputLimits.MAX_MACRO_GRAMS} g. Hasta dos decimales, con coma o punto."
-                                })
-                            },
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                    }
-                }
             }
         }
     }
@@ -189,11 +160,10 @@ private fun formatAutomaticMacro(grams: BigDecimal): String =
 @Composable
 private fun NutritionPreviewContent(
     mode: NutritionGoalModeUi,
-    setup: ManualGoalsSetupUi? = null,
     initialForm: OnboardingFormState = OnboardingFormState(),
 ) {
     var form by remember {
-        mutableStateOf(initialForm.copy(nutritionGoalMode = mode, manualGoalsSetup = setup))
+        mutableStateOf(initialForm.copy(nutritionGoalMode = mode))
     }
     UpUpProgressTheme {
         Surface(color = MaterialTheme.colorScheme.background) {
@@ -207,7 +177,6 @@ private fun NutritionPreviewContent(
                     form = form,
                     errors = emptyMap(),
                     onModeSelected = { form = form.copy(nutritionGoalMode = it) },
-                    onManualSetupSelected = { form = form.copy(manualGoalsSetup = it) },
                     onManualInputChanged = { field, value ->
                         form = form.copy(
                             manualNutritionDraft = form.manualNutritionDraft.withValue(field, value)
@@ -223,13 +192,7 @@ private fun NutritionPreviewContent(
 @Preview(name = "Manual - texto grande", device = Devices.PIXEL_7, showSystemUi = true, fontScale = 1.3f, locale = "es-rCL")
 @Composable
 private fun ManualNutritionPreview() {
-    NutritionPreviewContent(NutritionGoalModeUi.MANUAL, ManualGoalsSetupUi.NOW)
-}
-
-@Preview(name = "Manual - después", device = Devices.PIXEL_7, showSystemUi = true, locale = "es-rCL")
-@Composable
-private fun PendingNutritionPreview() {
-    NutritionPreviewContent(NutritionGoalModeUi.MANUAL, ManualGoalsSetupUi.LATER)
+    NutritionPreviewContent(NutritionGoalModeUi.MANUAL)
 }
 
 @Preview(name = "Automático", device = Devices.PIXEL_7, showSystemUi = true, locale = "es-rCL")

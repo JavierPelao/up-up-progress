@@ -100,12 +100,12 @@ class OnboardingAutomaticNutritionTest {
     @Test
     fun manualModeKeepsItsOwnValidationAndDoesNotReuseAutomaticEstimates() {
         val manual = form.copy(
-            ageYears = 18, heightCm = 99, weightHundredthsKg = 2_999,
+            ageYears = 18, heightCm = 100, weightHundredthsKg = 2_999,
             nutritionGoalMode = NutritionGoalModeUi.MANUAL,
-            manualGoalsSetup = ManualGoalsSetupUi.LATER,
+            manualNutritionDraft = ManualNutritionDraft("2000", "100", "250", "65"),
         )
         assertNull(manual.automaticNutritionResultOrNull())
-        assertNull(manual.manualNutritionTargetsOrNull())
+        assertTrue(manual.manualNutritionTargetsOrNull() != null)
         assertTrue(validateOnboardingForm(manual).isEmpty())
     }
 

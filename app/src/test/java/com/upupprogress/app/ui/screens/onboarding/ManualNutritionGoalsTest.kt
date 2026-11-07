@@ -19,7 +19,6 @@ class ManualNutritionGoalsTest {
         activityLevel = ActivityLevelUi.ACTIVE,
         personalGoal = PersonalGoalUi.MAINTAIN_WEIGHT,
         nutritionGoalMode = NutritionGoalModeUi.MANUAL,
-        manualGoalsSetup = ManualGoalsSetupUi.NOW,
         manualNutritionDraft = draft
     )
 
@@ -119,26 +118,18 @@ class ManualNutritionGoalsTest {
     }
 
     @Test
-    fun requiresAnExplicitModeAndManualSetupChoice() {
-        assertEquals(
-            setOf(OnboardingField.NUTRITION_MODE),
-            validateOnboardingForm(form.copy(nutritionGoalMode = null)).keys
-        )
-        assertEquals(
-            setOf(OnboardingField.MANUAL_SETUP),
-            validateOnboardingForm(form.copy(manualGoalsSetup = null)).keys
-        )
+    fun requiresAnExplicitMode() {
+        assertEquals(setOf(OnboardingField.NUTRITION_MODE),
+            validateOnboardingForm(form.copy(nutritionGoalMode = null)).keys)
     }
 
     @Test
-    fun laterIgnoresUnfinishedDraftAndLeavesEffectiveTargetsUndefined() {
-        val later = form.copy(
-            manualGoalsSetup = ManualGoalsSetupUi.LATER,
-            manualNutritionDraft = draft.copy(calories = "0", proteinGrams = "")
-        )
-        assertTrue(validateOnboardingForm(later).isEmpty())
-        assertNull(later.manualNutritionTargetsOrNull())
-        assertNull(form.copy(manualGoalsSetup = ManualGoalsSetupUi.LATER).manualNutritionTargetsOrNull())
+    fun legacyLaterDraftCannotBypassRequiredTargets() {
+        val saved = form.copy(manualNutritionDraft = ManualNutritionDraft()).toSavedValues().toMutableList()
+        saved[8] = "LATER"
+        val restored = restoreOnboardingForm(saved)
+        assertEquals(4, validateOnboardingForm(restored).size)
+        assertNull(restored.manualNutritionTargetsOrNull())
     }
 
     @Test
@@ -155,8 +146,7 @@ class ManualNutritionGoalsTest {
     @Test
     fun changingModesKeepsDraftAvailableWhenReturningToManualNow() {
         val switched = form.copy(nutritionGoalMode = NutritionGoalModeUi.AUTOMATIC)
-            .copy(nutritionGoalMode = NutritionGoalModeUi.MANUAL, manualGoalsSetup = ManualGoalsSetupUi.LATER)
-            .copy(manualGoalsSetup = ManualGoalsSetupUi.NOW)
+            .copy(nutritionGoalMode = NutritionGoalModeUi.MANUAL)
         assertEquals(draft, switched.manualNutritionDraft)
         assertEquals(form.manualNutritionTargetsOrNull(), switched.manualNutritionTargetsOrNull())
     }
@@ -165,9 +155,6 @@ class ManualNutritionGoalsTest {
     fun savedStateRestoresChoicesProfileAndUnfinishedDecimalText() {
         val unfinished = form.copy(manualNutritionDraft = draft.copy(fatGrams = "65,"))
         assertEquals(unfinished, restoreOnboardingForm(unfinished.toSavedValues()))
-        val later = unfinished.copy(manualGoalsSetup = ManualGoalsSetupUi.LATER)
-        assertEquals(later, restoreOnboardingForm(later.toSavedValues()))
-        assertNull(restoreOnboardingForm(later.toSavedValues()).manualNutritionTargetsOrNull())
     }
 
     @Test
@@ -176,7 +163,6 @@ class ManualNutritionGoalsTest {
         assertEquals(
             form.copy(
                 nutritionGoalMode = null,
-                manualGoalsSetup = null,
                 manualNutritionDraft = ManualNutritionDraft()
             ),
             restored

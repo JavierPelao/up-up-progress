@@ -15,7 +15,7 @@ class OnboardingFormStateTest {
         activityLevel = ActivityLevelUi.ACTIVE,
         personalGoal = PersonalGoalUi.MAINTAIN_WEIGHT,
         nutritionGoalMode = NutritionGoalModeUi.MANUAL,
-        manualGoalsSetup = ManualGoalsSetupUi.LATER
+        manualNutritionDraft = ManualNutritionDraft("2200", "150", "250", "65")
     )
 
     @Test

@@ -2,10 +2,10 @@ package com.upupprogress.app.ui.screens.onboarding
 
 /** Límites técnicos provisionales de la interfaz; no son reglas médicas ni del cálculo nutricional. */
 object OnboardingInputLimits {
-    const val MIN_AGE_YEARS = 1
+    const val MIN_AGE_YEARS = 18
     const val MAX_AGE_YEARS = 120
-    const val MIN_HEIGHT_CM = 30
-    const val MAX_HEIGHT_CM = 300
+    const val MIN_HEIGHT_CM = 100
+    const val MAX_HEIGHT_CM = 250
     const val MIN_WEIGHT_HUNDREDTHS_KG = 1
     // NUMERIC(5,2) y weight_kg > 0 en la migración local de body_weight_logs.
     const val MAX_WEIGHT_HUNDREDTHS_KG = 99_999
@@ -25,14 +25,14 @@ enum class ActivityLevelUi(val label: String) {
 }
 
 enum class PersonalGoalUi(val label: String) {
-    GAIN_MUSCLE_OR_WEIGHT("Aumentar masa muscular/peso"),
-    LOSE_WEIGHT("Reducir peso"),
+    GAIN_MUSCLE_OR_WEIGHT("Ganar peso"),
+    LOSE_WEIGHT("Perder peso"),
     MAINTAIN_WEIGHT("Mantener peso")
 }
 
 enum class OnboardingField {
     NAME, FORMULA_SEX, AGE, HEIGHT, WEIGHT, ACTIVITY, GOAL,
-    NUTRITION_MODE, MANUAL_SETUP, DAILY_CALORIES, PROTEIN, CARBS, FAT, AUTOMATIC_TARGETS
+    NUTRITION_MODE, DAILY_CALORIES, PROTEIN, CARBS, FAT, AUTOMATIC_TARGETS
 }
 
 /** Borrador del formulario. No representa un perfil guardado ni un onboarding completado. */
@@ -46,7 +46,6 @@ data class OnboardingFormState(
     val activityLevel: ActivityLevelUi? = null,
     val personalGoal: PersonalGoalUi? = null,
     val nutritionGoalMode: NutritionGoalModeUi? = null,
-    val manualGoalsSetup: ManualGoalsSetupUi? = null,
     val manualNutritionDraft: ManualNutritionDraft = ManualNutritionDraft()
 )
 
@@ -86,12 +85,8 @@ fun validateOnboardingForm(form: OnboardingFormState): Map<OnboardingField, Stri
                 put(result.issue.toOnboardingField(), automaticNutritionIssueMessage(result.issue))
             }
         }
-        NutritionGoalModeUi.MANUAL -> when (form.manualGoalsSetup) {
-            null -> put(OnboardingField.MANUAL_SETUP, "Elige si configurarás tus metas ahora o después.")
-            ManualGoalsSetupUi.LATER -> Unit
-            ManualGoalsSetupUi.NOW -> validateManualNutritionDraft(form.manualNutritionDraft).forEach { (field, message) ->
-                put(field.toOnboardingField(), message)
-            }
+        NutritionGoalModeUi.MANUAL -> validateManualNutritionDraft(form.manualNutritionDraft).forEach { (field, message) ->
+            put(field.toOnboardingField(), message)
         }
     }
 }
@@ -103,9 +98,9 @@ internal fun ManualNutritionField.toOnboardingField(): OnboardingField = when (t
     ManualNutritionField.FAT -> OnboardingField.FAT
 }
 
-/** El borrador se conserva al cambiar de modalidad, pero solo NOW tiene metas manuales definidas. */
+/** Cambiar de modalidad conserva el borrador; Manual requiere las cuatro metas. */
 fun OnboardingFormState.manualNutritionTargetsOrNull(): ManualNutritionTargets? =
-    if (nutritionGoalMode == NutritionGoalModeUi.MANUAL && manualGoalsSetup == ManualGoalsSetupUi.NOW) {
+    if (nutritionGoalMode == NutritionGoalModeUi.MANUAL) {
         parseManualNutritionTargets(manualNutritionDraft)
     } else null
 
@@ -166,7 +161,7 @@ internal fun OnboardingFormState.toSavedValues(): List<Any> = listOf(
     activityLevel?.name.orEmpty(),
     personalGoal?.name.orEmpty(),
     nutritionGoalMode?.name.orEmpty(),
-    manualGoalsSetup?.name.orEmpty(),
+    "", // Posición reservada para restaurar el formato anterior del borrador.
     manualNutritionDraft.calories,
     manualNutritionDraft.proteinGrams,
     manualNutritionDraft.carbsGrams,
@@ -182,7 +177,6 @@ internal fun restoreOnboardingForm(saved: List<Any>): OnboardingFormState = Onbo
     activityLevel = ActivityLevelUi.entries.firstOrNull { it.name == saved.getOrNull(5) },
     personalGoal = PersonalGoalUi.entries.firstOrNull { it.name == saved.getOrNull(6) },
     nutritionGoalMode = NutritionGoalModeUi.entries.firstOrNull { it.name == saved.getOrNull(7) },
-    manualGoalsSetup = ManualGoalsSetupUi.entries.firstOrNull { it.name == saved.getOrNull(8) },
     manualNutritionDraft = ManualNutritionDraft(
         calories = saved.getOrNull(9) as? String ?: "",
         proteinGrams = saved.getOrNull(10) as? String ?: "",

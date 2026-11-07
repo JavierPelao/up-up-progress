@@ -6,7 +6,7 @@ import com.upupprogress.app.ui.components.AppBottomBar
 import com.upupprogress.app.ui.components.AppDestination
 import com.upupprogress.app.ui.screens.login.LoginScreen
 import com.upupprogress.app.ui.screens.login.LoginViewModel
-import com.upupprogress.app.ui.screens.registration.RegistrationScreen
+import com.upupprogress.app.ui.screens.registration.RegistrationFlow
 import com.upupprogress.app.ui.screens.registration.RegistrationViewModel
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
@@ -154,7 +154,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     } else if (showRegistration) {
-                        RegistrationScreen(
+                        RegistrationFlow(
                             modifier = screenModifier,
                             onSignUp = registrationViewModel::signUp,
                             onBackToLogin = {

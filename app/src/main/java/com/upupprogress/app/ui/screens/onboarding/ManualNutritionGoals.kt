@@ -15,19 +15,12 @@ enum class NutritionGoalModeUi(val label: String) {
     MANUAL("Manual"), AUTOMATIC("Automático")
 }
 
-enum class ManualGoalsSetupUi(val label: String) {
-    NOW("Configurar ahora"), LATER("Configurar después")
-}
-
 enum class ManualNutritionField(val label: String, val unit: String) {
     CALORIES("Calorías diarias", "kcal"),
     PROTEIN("Proteínas", "g"),
     CARBS("Carbohidratos", "g"),
     FAT("Grasas", "g")
 }
-
-const val PENDING_NUTRITION_GOALS_MESSAGE =
-    "Aún no has configurado tus metas nutricionales. Puedes personalizarlas desde Configuración."
 
 /** Texto de edición, separado de las metas válidas para conservar el borrador al cambiar de modalidad. */
 data class ManualNutritionDraft(

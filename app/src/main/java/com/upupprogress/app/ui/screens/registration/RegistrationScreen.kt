@@ -3,13 +3,16 @@ package com.upupprogress.app.ui.screens.registration
 import android.util.Patterns
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,9 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
-import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.TextObfuscationMode
-import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -34,7 +35,6 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,21 +45,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.platform.LocalAutofillManager
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentType
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.upupprogress.app.data.repository.RegistrationResult
 import com.upupprogress.app.ui.theme.UpUpProgressTheme
-
-// Mínimo declarado en supabase/config.toml; el servidor valida su política completa.
-private const val MIN_PASSWORD_LENGTH = 6
 
 @Composable
 fun RegistrationScreen(
@@ -68,11 +64,13 @@ fun RegistrationScreen(
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
     errorMessage: String? = null,
-    result: RegistrationResult? = null
+    result: RegistrationResult? = null,
+    fields: RegistrationFields = rememberRegistrationFields(),
 ) {
-    val emailState = rememberTextFieldState()
-    val passwordState = remember { TextFieldState() }
-    val confirmationState = remember { TextFieldState() }
+    val nameState = fields.name
+    val emailState = fields.email
+    val passwordState = fields.password
+    val confirmationState = fields.confirmation
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmationVisible by remember { mutableStateOf(false) }
     var submitAttempted by remember { mutableStateOf(false) }
@@ -82,6 +80,7 @@ fun RegistrationScreen(
     val password = passwordState.text.toString()
     val confirmation = confirmationState.text.toString()
 
+    val nameError = if (submitAttempted && nameState.text.isBlank()) "Ingresa tu nombre." else null
     val emailError = when {
         !submitAttempted -> null
         email.isBlank() -> "Ingresa tu correo electrónico."
@@ -91,7 +90,7 @@ fun RegistrationScreen(
     val passwordError = when {
         !submitAttempted -> null
         password.isBlank() -> "Ingresa una contraseña."
-        password.length < MIN_PASSWORD_LENGTH -> "Usa al menos $MIN_PASSWORD_LENGTH caracteres."
+        password.length < MIN_REGISTRATION_PASSWORD_LENGTH -> "Usa al menos $MIN_REGISTRATION_PASSWORD_LENGTH caracteres."
         else -> null
     }
     val confirmationError = when {
@@ -119,9 +118,9 @@ fun RegistrationScreen(
         val currentEmail = emailState.text.toString().trim()
         val currentPassword = passwordState.text.toString()
         val currentConfirmation = confirmationState.text.toString()
-        if (currentEmail.isNotBlank() &&
+        if (nameState.text.isNotBlank() && currentEmail.isNotBlank() &&
             Patterns.EMAIL_ADDRESS.matcher(currentEmail).matches() &&
-            currentPassword.isNotBlank() && currentPassword.length >= MIN_PASSWORD_LENGTH &&
+            currentPassword.isNotBlank() && currentPassword.length >= MIN_REGISTRATION_PASSWORD_LENGTH &&
             currentPassword == currentConfirmation
         ) {
             focusManager.clearFocus()
@@ -137,12 +136,6 @@ fun RegistrationScreen(
         }
     }
 
-    DisposableEffect(passwordState, confirmationState, autofillManager) {
-        onDispose {
-            clearPasswords()
-            autofillManager?.cancel()
-        }
-    }
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
         unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
@@ -154,6 +147,7 @@ fun RegistrationScreen(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .safeDrawingPadding()
             .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 28.dp),
@@ -163,45 +157,11 @@ fun RegistrationScreen(
             modifier = Modifier.widthIn(max = 440.dp).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "↑",
-                        modifier = Modifier.clearAndSetSemantics {},
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
-                Text(
-                    text = "Up Up Progress!",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontSize = 22.sp,
-                    lineHeight = 28.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "¡Comienza tu progreso!",
-                    modifier = Modifier.semantics { heading() },
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    text = "Crea tu cuenta y comienza a registrar tus avances.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            LinearProgressIndicator(
+                progress = { 1f / 6f },
+                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
+                    .semantics { contentDescription = "Paso 1 de 6" },
+            )
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -242,9 +202,24 @@ fun RegistrationScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Ingresa tu correo y elige una contraseña segura.",
+                            text = "Completa tus datos de acceso. Después te guiaremos paso a paso.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            state = nameState,
+                            modifier = Modifier.fillMaxWidth().semantics { contentType = ContentType.PersonFullName },
+                            enabled = !isLoading,
+                            label = { Text("Nombre") },
+                            lineLimits = TextFieldLineLimits.SingleLine,
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Words,
+                                imeAction = ImeAction.Next,
+                            ),
+                            isError = nameError != null,
+                            supportingText = nameError?.let { { Text(it) } },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = fieldColors,
                         )
                         OutlinedTextField(
                             state = emailState,
@@ -292,7 +267,7 @@ fun RegistrationScreen(
                             ),
                             isError = passwordError != null,
                             supportingText = {
-                                Text(passwordError ?: "Mínimo $MIN_PASSWORD_LENGTH caracteres.")
+                                Text(passwordError ?: "Mínimo $MIN_REGISTRATION_PASSWORD_LENGTH caracteres.")
                             },
                             shape = RoundedCornerShape(12.dp),
                             colors = fieldColors
@@ -350,7 +325,7 @@ fun RegistrationScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                             }
-                            Text(if (isLoading) "Creando cuenta..." else "Crear cuenta")
+                            Text(if (isLoading) "Creando cuenta..." else "Continuar")
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
