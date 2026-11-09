@@ -1,6 +1,7 @@
 package com.upupprogress.app.ui.screens.onboarding
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -90,5 +91,32 @@ class OnboardingFormStateTest {
         ).forEach { (form, missingField) ->
             assertEquals(setOf(missingField), validateOnboardingForm(form).keys)
         }
+    }
+
+    @Test
+    fun wireValuesMatchTheNutritionContract() {
+        assertEquals(setOf("light", "high", "very_high"), ActivityLevelUi.entries.map { it.backendValue }.toSet())
+        assertEquals(setOf("male", "female"), FormulaSexUi.entries.map { it.backendValue }.toSet())
+        assertEquals(setOf("gain_muscle", "lose_weight", "maintain_weight"),
+            PersonalGoalUi.entries.map { it.backendValue }.toSet())
+    }
+
+    @Test
+    fun retiredActivityRequiresASelectionWithoutDiscardingTheDraft() {
+        val saved = validForm.toSavedValues().toMutableList()
+        saved[5] = "SEDENTARY"
+        val restored = restoreOnboardingForm(saved)
+        assertNull(restored.activityLevel)
+        assertEquals(validForm.copy(activityLevel = null), restored)
+        assertEquals(setOf(OnboardingField.ACTIVITY), validateOnboardingForm(restored).keys)
+    }
+
+    @Test
+    fun restoresSupportedChoicesFromThePreviousEnumNames() {
+        val saved = validForm.toSavedValues().toMutableList()
+        saved[1] = "FEMALE"
+        saved[5] = "ACTIVE"
+        saved[6] = "MAINTAIN_WEIGHT"
+        assertEquals(validForm, restoreOnboardingForm(saved))
     }
 }

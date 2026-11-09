@@ -21,7 +21,7 @@ internal fun OnboardingReview(
     errors: Map<OnboardingField, String>,
     editingSection: OnboardingStep?,
     onEditSection: (OnboardingStep?) -> Unit,
-    onEditAccount: () -> Unit,
+    onEditAccount: (() -> Unit)?,
     onFormChange: (OnboardingFormState) -> Unit,
     openNumberPicker: (OnboardingNumberField) -> Unit,
 ) {
@@ -36,8 +36,10 @@ internal fun OnboardingReview(
             modifier = Modifier.fillMaxWidth(),
         )
         if (email.isNotBlank()) Text(email, style = MaterialTheme.typography.bodyMedium)
-        Text("La contraseña no se muestra por seguridad.", style = MaterialTheme.typography.bodySmall)
-        TextButton(onClick = onEditAccount) { Text("Editar correo o contraseña") }
+        onEditAccount?.let { editAccount ->
+            Text("La contraseña no se muestra por seguridad.", style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = editAccount) { Text("Editar correo o contraseña") }
+        }
     }
     OnboardingStep.entries.filter { it != OnboardingStep.REVIEW }.forEach { section ->
         OnboardingSection(section.title) {

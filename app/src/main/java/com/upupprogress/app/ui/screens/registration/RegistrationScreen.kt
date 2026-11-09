@@ -181,7 +181,7 @@ fun RegistrationScreen(
                         )
                         Text(
                             text = if (pendingConfirmation) {
-                                "Si corresponde, recibirás un enlace para confirmar tu cuenta. Revisa también tu correo no deseado y después vuelve para iniciar sesión."
+                                "Si corresponde, recibirás un enlace para confirmar tu cuenta. Revisa también tu correo no deseado y después inicia sesión para terminar de guardar tu perfil, peso y metas."
                             } else {
                                 "Tu cuenta está lista para continuar con tu progreso."
                             },

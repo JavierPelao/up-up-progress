@@ -228,7 +228,7 @@ private fun AutomaticNutritionUnavailablePreview() {
             ageYears = 78,
             heightCm = 100,
             weightHundredthsKg = 3_000,
-            activityLevel = ActivityLevelUi.SEDENTARY,
+            activityLevel = ActivityLevelUi.LIGHTLY_ACTIVE,
             personalGoal = PersonalGoalUi.MAINTAIN_WEIGHT,
         )
     )

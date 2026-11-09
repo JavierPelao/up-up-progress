@@ -9,7 +9,6 @@ enum class OnboardingStep(val title: String, val description: String) {
 }
 
 internal fun ActivityLevelUi.description(): String = when (this) {
-    ActivityLevelUi.SEDENTARY -> "Pasas la mayor parte del día sentado y haces poco ejercicio."
     ActivityLevelUi.LIGHTLY_ACTIVE -> "Caminas y realizas actividad física ligera algunos días."
     ActivityLevelUi.ACTIVE -> "Te mantienes en movimiento y entrenas con regularidad."
     ActivityLevelUi.VERY_ACTIVE -> "Realizas entrenamientos intensos o una actividad diaria muy exigente."

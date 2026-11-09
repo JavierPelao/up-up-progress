@@ -60,7 +60,6 @@ class AutomaticNutritionCalculatorTest {
     @Test
     fun appliesTheCurrentActivityFactors() {
         val expectedTdee = mapOf(
-            ActivityLevelUi.SEDENTARY to "1978.5",
             ActivityLevelUi.LIGHTLY_ACTIVE to "2267.03125",
             ActivityLevelUi.ACTIVE to "2473.125",
             ActivityLevelUi.VERY_ACTIVE to "3132.625",
@@ -86,13 +85,13 @@ class AutomaticNutritionCalculatorTest {
 
     @Test
     fun roundsHalfKcalUpAndAllocatesRemainingEnergyFromTheIntegerTarget() {
-        val result = estimate(input.copy(activityLevel = ActivityLevelUi.SEDENTARY))
-        assertDecimal("1978.5", result.estimatedTdeeKcal)
-        assertEquals(1979, result.caloriesKcal)
-        assertDecimal("84.00", result.proteinGrams)
-        assertDecimal("262.33", result.carbsGrams)
-        assertDecimal("65.97", result.fatGrams)
-        assertDecimal("1979.05", result.caloriesFromMacrosKcal)
+        val result = estimate(input.copy(heightCm = 176))
+        assertDecimal("2482.5", result.estimatedTdeeKcal)
+        assertEquals(2483, result.caloriesKcal)
+        assertDecimal("126.00", result.proteinGrams)
+        assertDecimal("308.53", result.carbsGrams)
+        assertDecimal("82.77", result.fatGrams)
+        assertDecimal("2483.05", result.caloriesFromMacrosKcal)
     }
 
     @Test
@@ -128,7 +127,7 @@ class AutomaticNutritionCalculatorTest {
                 weightHundredthsKg = 30_000,
                 heightCm = 100,
                 ageYears = 78,
-                activityLevel = ActivityLevelUi.SEDENTARY,
+                activityLevel = ActivityLevelUi.LIGHTLY_ACTIVE,
             ),
         )
         cases.forEach { estimate(it) }
@@ -140,7 +139,7 @@ class AutomaticNutritionCalculatorTest {
             AutomaticNutritionIssue.CALORIES_OUT_OF_RANGE,
             input.copy(
                 sexForFormula = FormulaSexUi.FEMALE, ageYears = 78, heightCm = 100,
-                weightHundredthsKg = 3_000, activityLevel = ActivityLevelUi.SEDENTARY,
+                weightHundredthsKg = 3_000, activityLevel = ActivityLevelUi.LIGHTLY_ACTIVE,
             ),
         )
         assertUnavailable(
@@ -211,9 +210,6 @@ class AutomaticNutritionCalculatorTest {
     @Test
     fun appliesEveryCellOfTheProteinTableForSeventyKg() {
         val cases = listOf(
-            Triple(ActivityLevelUi.SEDENTARY, PersonalGoalUi.MAINTAIN_WEIGHT, "84.00"),
-            Triple(ActivityLevelUi.SEDENTARY, PersonalGoalUi.LOSE_WEIGHT, "98.00"),
-            Triple(ActivityLevelUi.SEDENTARY, PersonalGoalUi.GAIN_MUSCLE_OR_WEIGHT, "112.00"),
             Triple(ActivityLevelUi.LIGHTLY_ACTIVE, PersonalGoalUi.MAINTAIN_WEIGHT, "98.00"),
             Triple(ActivityLevelUi.LIGHTLY_ACTIVE, PersonalGoalUi.LOSE_WEIGHT, "112.00"),
             Triple(ActivityLevelUi.LIGHTLY_ACTIVE, PersonalGoalUi.GAIN_MUSCLE_OR_WEIGHT, "112.00"),
@@ -232,14 +228,14 @@ class AutomaticNutritionCalculatorTest {
     @Test
     fun roundsProteinBeforeReservingItsEnergyForTheRemainder() {
         val result = estimate(input.copy(
-            weightHundredthsKg = 7_028,
-            activityLevel = ActivityLevelUi.SEDENTARY,
+            weightHundredthsKg = 7_019,
+            activityLevel = ActivityLevelUi.LIGHTLY_ACTIVE,
             personalGoal = PersonalGoalUi.LOSE_WEIGHT,
         ))
-        assertEquals(1685, result.caloriesKcal)
-        assertDecimal("98.39", result.proteinGrams)
-        assertDecimal("196.49", result.carbsGrams)
-        assertDecimal("56.17", result.fatGrams)
+        assertEquals(1929, result.caloriesKcal)
+        assertDecimal("112.30", result.proteinGrams)
+        assertDecimal("225.28", result.carbsGrams)
+        assertDecimal("64.30", result.fatGrams)
     }
 
     @Test
@@ -276,10 +272,10 @@ class AutomaticNutritionCalculatorTest {
     @Test
     fun exactEnergyBalanceAllowsDefinedZeroCarbs() {
         // Configuración sintética para verificar el límite matemático, no una regla de la aplicación.
-        val syntheticRules = rulesWithProtein(ActivityLevelUi.SEDENTARY, PersonalGoalUi.MAINTAIN_WEIGHT, "4.2")
+        val syntheticRules = rulesWithProtein(ActivityLevelUi.ACTIVE, PersonalGoalUi.MAINTAIN_WEIGHT, "4.2")
         val result = AutomaticNutritionCalculator(syntheticRules).calculate(input.copy(
-            ageYears = 51, heightCm = 200, weightHundredthsKg = 10_000,
-            activityLevel = ActivityLevelUi.SEDENTARY,
+            ageYears = 61, heightCm = 144, weightHundredthsKg = 10_000,
+            activityLevel = ActivityLevelUi.ACTIVE,
         ))
         assertTrue(result is AutomaticNutritionResult.Estimated)
         val value = (result as AutomaticNutritionResult.Estimated).estimate

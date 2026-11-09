@@ -1,12 +1,18 @@
 package com.upupprogress.app.data.repository
 
 import com.upupprogress.app.data.remote.SupabaseClientProvider
+import com.upupprogress.app.data.model.AuthenticatedAccount
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.coroutines.flow.StateFlow
 
-class AuthRepository {
+interface RegistrationAuthGateway {
+    fun currentAccount(): AuthenticatedAccount?
+    suspend fun signUp(email: String, password: String): RegistrationResult
+}
+
+class AuthRepository : RegistrationAuthGateway {
 
     private val supabase = SupabaseClientProvider.client
 
@@ -27,7 +33,11 @@ class AuthRepository {
         }
     }
 
-    suspend fun signUp(email: String, password: String): RegistrationResult {
+    override fun currentAccount(): AuthenticatedAccount? = supabase.auth.currentUserOrNull()?.let {
+        AuthenticatedAccount(it.id, it.email)
+    }
+
+    override suspend fun signUp(email: String, password: String): RegistrationResult {
         val user = supabase.auth.signUpWith(Email) {
             this.email = email.trim()
             this.password = password

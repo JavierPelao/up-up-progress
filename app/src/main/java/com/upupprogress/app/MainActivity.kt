@@ -1,22 +1,26 @@
 package com.upupprogress.app
 
 import com.upupprogress.app.ui.screens.home.HomeScreen
+import com.upupprogress.app.ui.screens.nutrition.*
+import java.time.LocalDate
 import com.upupprogress.app.ui.screens.training.TrainingScreen
+import com.upupprogress.app.ui.screens.profile.ProfileScreen
+import com.upupprogress.app.ui.components.AppHeader
 import com.upupprogress.app.ui.components.AppBottomBar
 import com.upupprogress.app.ui.components.AppDestination
 import com.upupprogress.app.ui.screens.login.LoginScreen
 import com.upupprogress.app.ui.screens.login.LoginViewModel
 import com.upupprogress.app.ui.screens.registration.RegistrationFlow
 import com.upupprogress.app.ui.screens.registration.RegistrationViewModel
+import com.upupprogress.app.ui.screens.registration.AccountSetupScreen
+import com.upupprogress.app.ui.screens.registration.AccountSetupPhase
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +48,7 @@ import com.upupprogress.app.ui.theme.UpUpProgressTheme
 class MainActivity : ComponentActivity() {
     private val loginViewModel: LoginViewModel by viewModels()
     private val registrationViewModel: RegistrationViewModel by viewModels()
+    private val foodDiaryViewModel: FoodDiaryViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,7 +57,11 @@ class MainActivity : ComponentActivity() {
             UpUpProgressTheme {
                 val loginState by loginViewModel.uiState.collectAsStateWithLifecycle()
                 val registrationState by registrationViewModel.uiState.collectAsStateWithLifecycle()
+                val foodState by foodDiaryViewModel.uiState.collectAsStateWithLifecycle()
+                val canEnterHome = loginState.isAuthenticated &&
+                    registrationState.setupPhase == AccountSetupPhase.COMPLETE && !registrationState.showSavedConfirmation
                 var showRegistration by rememberSaveable { mutableStateOf(false) }
+                var showProfile by rememberSaveable { mutableStateOf(false) }
                 var selectedDestination by rememberSaveable {
                     mutableStateOf(AppDestination.HOME)
                 }
@@ -67,15 +76,41 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                fun showNutritionToday() {
+                    foodDiaryViewModel.selectDate(LocalDate.now())
+                    selectedDestination = AppDestination.NUTRITION
+                }
+
+                fun registerFoodToday() {
+                    showNutritionToday()
+                    foodDiaryViewModel.startScan(forToday = true)
+                }
+
+                fun returnToPreviousScreen() {
+                    if (showProfile) showProfile = false
+                    else selectedDestination = AppDestination.HOME
+                }
+
                 LaunchedEffect(loginState.isAuthenticated) {
                     if (loginState.isAuthenticated) {
+                        registrationViewModel.onAuthenticated()
                         showRegistration = false
                     } else {
+                        registrationViewModel.onSignedOut()
                         selectedDestination = AppDestination.HOME
+                        showProfile = false
                         AppDestination.entries.forEach { tabStateHolder.removeState(it.name) }
+                        tabStateHolder.removeState("PROFILE")
                         snackbarHostState.currentSnackbarData?.dismiss()
                     }
                 }
+
+                LaunchedEffect(canEnterHome, registrationState.savedStatus?.userId) {
+                    if (canEnterHome) {
+                        foodDiaryViewModel.activate(requireNotNull(registrationState.savedStatus?.userId))
+                    } else if (!loginState.isAuthenticated) foodDiaryViewModel.clear()
+                }
+                if (canEnterHome) ObserveFoodDate(foodDiaryViewModel::onClockChanged)
 
                 LaunchedEffect(loginState.isAuthenticated, loginState.errorMessage) {
                     val message = loginState.errorMessage
@@ -85,32 +120,44 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                BackHandler(enabled = !loginState.isAuthenticated && showRegistration) {
+                BackHandler(enabled = !loginState.isAuthenticated && showRegistration && !registrationState.isLoading) {
                     registrationViewModel.reset()
                     showRegistration = false
                 }
 
                 BackHandler(
-                    enabled = loginState.isAuthenticated &&
-                        selectedDestination != AppDestination.HOME
+                    enabled = canEnterHome && (showProfile || selectedDestination != AppDestination.HOME)
                 ) {
-                    selectedDestination = AppDestination.HOME
+                    returnToPreviousScreen()
                 }
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     containerColor = MaterialTheme.colorScheme.background,
                     snackbarHost = { SnackbarHost(snackbarHostState) },
+                    topBar = {
+                        if (canEnterHome) {
+                            AppHeader(
+                                title = when {
+                                    showProfile -> "Perfil"
+                                    selectedDestination == AppDestination.HOME -> "Up Up Progress"
+                                    else -> selectedDestination.label
+                                },
+                                onBack = if (showProfile || selectedDestination != AppDestination.HOME) {
+                                    ::returnToPreviousScreen
+                                } else null,
+                                onProfile = if (showProfile) null else { { showProfile = true } },
+                            )
+                        }
+                    },
                     bottomBar = {
-                        if (loginState.isAuthenticated) {
+                        if (canEnterHome && !showProfile) {
                             AppBottomBar(
                                 selectedDestination = selectedDestination,
                                 onDestinationSelected = { destination ->
                                     when (destination) {
-                                        AppDestination.HOME, AppDestination.TRAINING ->
+                                        AppDestination.HOME, AppDestination.TRAINING, AppDestination.NUTRITION ->
                                             selectedDestination = destination
-                                        AppDestination.NUTRITION ->
-                                            showPendingFeature("Nutrición estará disponible próximamente.")
                                         AppDestination.PROGRESS ->
                                             showPendingFeature("Progreso estará disponible próximamente.")
                                     }
@@ -123,33 +170,59 @@ class MainActivity : ComponentActivity() {
                         .padding(innerPadding)
                         .consumeWindowInsets(innerPadding)
 
-                    if (loginState.isAuthenticated) {
-                        Column(modifier = screenModifier.fillMaxSize()) {
-                            TextButton(
-                                onClick = loginViewModel::signOut,
-                                enabled = !loginState.isLoading
-                            ) {
-                                Text("← Volver al Login")
-                            }
-                            tabStateHolder.SaveableStateProvider(selectedDestination.name) {
+                    if (loginState.isAuthenticated && !canEnterHome) {
+                        AccountSetupScreen(
+                            state = registrationState, email = registrationViewModel.authenticatedEmail,
+                            onComplete = registrationViewModel::completeProfile,
+                            onRetry = registrationViewModel::onAuthenticated,
+                            onContinue = registrationViewModel::acknowledgeSaved,
+                            onSignOut = loginViewModel::signOut,
+                            onExit = { finish() }, modifier = screenModifier,
+                        )
+                    } else if (canEnterHome) {
+                        val status = requireNotNull(registrationState.savedStatus)
+                        tabStateHolder.SaveableStateProvider(if (showProfile) "PROFILE" else selectedDestination.name) {
+                            if (showProfile) {
+                                ProfileScreen(
+                                    status = status, email = registrationViewModel.authenticatedEmail,
+                                    onSignOut = loginViewModel::signOut, isSigningOut = loginState.isLoading,
+                                    modifier = screenModifier,
+                                )
+                            } else {
                                 when (selectedDestination) {
                                     AppDestination.HOME ->
-                                        HomeScreen(modifier = Modifier.weight(1f))
+                                        HomeScreen(
+                                            targets = requireNotNull(status.targets),
+                                            diary = foodState.today,
+                                            isNutritionLoading = foodState.isLoading,
+                                            nutritionError = foodState.error,
+                                            onRetryNutrition = foodDiaryViewModel::refresh,
+                                            onRegisterFood = ::registerFoodToday,
+                                            onCreateRoutine = {
+                                                showPendingFeature("La creación de rutinas estará disponible próximamente.")
+                                            },
+                                            onViewNutrition = ::showNutritionToday,
+                                            modifier = screenModifier,
+                                        )
                                     AppDestination.TRAINING ->
                                         TrainingScreen(
-                                            modifier = Modifier.weight(1f),
+                                            modifier = screenModifier,
                                             onCreateRoutine = {
-                                                showPendingFeature(
-                                                    "La creación de rutinas estará disponible próximamente."
-                                                )
+                                                showPendingFeature("La creación de rutinas estará disponible próximamente.")
                                             },
                                             onViewRoutine = { _, _ ->
-                                                showPendingFeature(
-                                                    "El registro del entrenamiento estará disponible próximamente."
-                                                )
+                                                showPendingFeature("El registro del entrenamiento estará disponible próximamente.")
                                             }
                                         )
-                                    AppDestination.NUTRITION, AppDestination.PROGRESS -> Unit
+                                    AppDestination.NUTRITION ->
+                                        NutritionScreen(
+                                            state = foodState,
+                                            onDateSelected = foodDiaryViewModel::selectDate,
+                                            onRegisterFood = { foodDiaryViewModel.startScan() },
+                                            onRefresh = foodDiaryViewModel::refresh,
+                                            modifier = screenModifier,
+                                        )
+                                    AppDestination.PROGRESS -> Unit
                                 }
                             }
                         }
@@ -163,7 +236,8 @@ class MainActivity : ComponentActivity() {
                             },
                             isLoading = registrationState.isLoading,
                             errorMessage = registrationState.errorMessage,
-                            result = registrationState.result
+                            result = registrationState.result,
+                            loadingMessage = registrationState.loadingMessage
                         )
                     } else {
                         LoginScreen(
@@ -185,6 +259,17 @@ class MainActivity : ComponentActivity() {
                                     "Inicia sesión para acceder al menú principal."
                                 )
                             }
+                        )
+                    }
+                }
+                if (canEnterHome) {
+                    if (foodState.scannerVisible) {
+                        BarcodeScannerDialog(foodDiaryViewModel::barcodeScanned, foodDiaryViewModel::cancelProduct)
+                    } else if (foodState.pendingDate != null) {
+                        FoodProductDialog(
+                            state = foodState, onQuantityChange = foodDiaryViewModel::changeQuantity,
+                            onMealChange = foodDiaryViewModel::changeMeal, onAdd = foodDiaryViewModel::saveFood,
+                            onCancel = foodDiaryViewModel::cancelProduct,
                         )
                     }
                 }

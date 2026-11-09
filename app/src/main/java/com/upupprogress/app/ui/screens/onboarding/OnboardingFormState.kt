@@ -2,7 +2,7 @@ package com.upupprogress.app.ui.screens.onboarding
 
 /** Límites técnicos provisionales de la interfaz; no son reglas médicas ni del cálculo nutricional. */
 object OnboardingInputLimits {
-    const val MIN_AGE_YEARS = 18
+    const val MIN_AGE_YEARS = 19
     const val MAX_AGE_YEARS = 120
     const val MIN_HEIGHT_CM = 100
     const val MAX_HEIGHT_CM = 250
@@ -11,23 +11,22 @@ object OnboardingInputLimits {
     const val MAX_WEIGHT_HUNDREDTHS_KG = 99_999
 }
 
-// Opciones locales de presentación. No definen valores de enumeraciones de Supabase.
-enum class FormulaSexUi(val label: String) {
-    MALE("Masculino"),
-    FEMALE("Femenino")
+// Etiquetas de presentación y valores explícitos del contrato nutrition-goals.
+enum class FormulaSexUi(val label: String, val backendValue: String) {
+    MALE("Masculino", "male"),
+    FEMALE("Femenino", "female")
 }
 
-enum class ActivityLevelUi(val label: String) {
-    SEDENTARY("Sedentario"),
-    LIGHTLY_ACTIVE("Ligeramente activo"),
-    ACTIVE("Activo"),
-    VERY_ACTIVE("Muy activo")
+enum class ActivityLevelUi(val label: String, val backendValue: String) {
+    LIGHTLY_ACTIVE("Ligeramente activo", "light"),
+    ACTIVE("Activo", "high"),
+    VERY_ACTIVE("Muy activo", "very_high")
 }
 
-enum class PersonalGoalUi(val label: String) {
-    GAIN_MUSCLE_OR_WEIGHT("Ganar peso"),
-    LOSE_WEIGHT("Perder peso"),
-    MAINTAIN_WEIGHT("Mantener peso")
+enum class PersonalGoalUi(val label: String, val backendValue: String) {
+    GAIN_MUSCLE_OR_WEIGHT("Ganar Masa Muscular", "gain_muscle"),
+    LOSE_WEIGHT("Perder peso", "lose_weight"),
+    MAINTAIN_WEIGHT("Mantener peso", "maintain_weight")
 }
 
 enum class OnboardingField {
@@ -154,12 +153,12 @@ private fun formatAutomaticWeightLimit(hundredthsKg: Int): String =
 // Valores simples compatibles con rememberSaveable. No representan persistencia en Supabase.
 internal fun OnboardingFormState.toSavedValues(): List<Any> = listOf(
     name,
-    sexForFormula?.name.orEmpty(),
+    sexForFormula?.backendValue.orEmpty(),
     ageYears ?: -1,
     heightCm ?: -1,
     weightHundredthsKg ?: -1,
-    activityLevel?.name.orEmpty(),
-    personalGoal?.name.orEmpty(),
+    activityLevel?.backendValue.orEmpty(),
+    personalGoal?.backendValue.orEmpty(),
     nutritionGoalMode?.name.orEmpty(),
     "", // Posición reservada para restaurar el formato anterior del borrador.
     manualNutritionDraft.calories,
@@ -170,12 +169,12 @@ internal fun OnboardingFormState.toSavedValues(): List<Any> = listOf(
 
 internal fun restoreOnboardingForm(saved: List<Any>): OnboardingFormState = OnboardingFormState(
     name = saved.getOrNull(0) as? String ?: "",
-    sexForFormula = FormulaSexUi.entries.firstOrNull { it.name == saved.getOrNull(1) },
+    sexForFormula = FormulaSexUi.entries.firstOrNull { it.backendValue == saved.getOrNull(1) || it.name == saved.getOrNull(1) },
     ageYears = (saved.getOrNull(2) as? Int)?.takeIf { it >= 0 },
     heightCm = (saved.getOrNull(3) as? Int)?.takeIf { it >= 0 },
     weightHundredthsKg = (saved.getOrNull(4) as? Int)?.takeIf { it >= 0 },
-    activityLevel = ActivityLevelUi.entries.firstOrNull { it.name == saved.getOrNull(5) },
-    personalGoal = PersonalGoalUi.entries.firstOrNull { it.name == saved.getOrNull(6) },
+    activityLevel = ActivityLevelUi.entries.firstOrNull { it.backendValue == saved.getOrNull(5) || it.name == saved.getOrNull(5) },
+    personalGoal = PersonalGoalUi.entries.firstOrNull { it.backendValue == saved.getOrNull(6) || it.name == saved.getOrNull(6) },
     nutritionGoalMode = NutritionGoalModeUi.entries.firstOrNull { it.name == saved.getOrNull(7) },
     manualNutritionDraft = ManualNutritionDraft(
         calories = saved.getOrNull(9) as? String ?: "",

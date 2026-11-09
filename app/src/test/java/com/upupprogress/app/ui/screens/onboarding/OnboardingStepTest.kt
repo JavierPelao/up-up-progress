@@ -27,7 +27,7 @@ class OnboardingStepTest {
     }
 
     @Test fun automaticLimitsAreExplainedOnTheNutritionStep() {
-        val outsideAutomatic = complete.copy(ageYears = 18)
+        val outsideAutomatic = complete.copy(ageYears = 79)
         assertTrue(validateOnboardingStep(outsideAutomatic, OnboardingStep.PERSONAL).isEmpty())
         assertEquals(setOf(OnboardingField.AGE),
             validateOnboardingStep(outsideAutomatic, OnboardingStep.NUTRITION).keys)

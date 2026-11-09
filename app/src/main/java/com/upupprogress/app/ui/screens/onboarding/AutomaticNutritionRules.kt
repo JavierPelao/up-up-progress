@@ -46,14 +46,11 @@ data class AutomaticNutritionRules(
     }
 }
 
-/**
- * Ajustar la multiplicadon de la formula, esto cambiara el resultado de las calorias
- */
+/** Reglas acordadas con nutrition-goals; las pruebas de paridad detectan diferencias. */
 object OnboardingNutritionConfig {
     val automaticRules = AutomaticNutritionRules(
         // Multiplicadores del BMR para estimar el gasto diario según la actividad.
         activityFactors = mapOf(
-            ActivityLevelUi.SEDENTARY to BigDecimal("1.20"),
             ActivityLevelUi.LIGHTLY_ACTIVE to BigDecimal("1.375"),
             ActivityLevelUi.ACTIVE to BigDecimal("1.50"),
             ActivityLevelUi.VERY_ACTIVE to BigDecimal("1.90"),
@@ -67,11 +64,6 @@ object OnboardingNutritionConfig {
         // Proteína en gramos por kg de peso corporal: tabla del proyecto.
         // Columnas en cada fila: mantener, reducir, ganar masa/peso.
         proteinGramsPerKg = mapOf(
-            ActivityLevelUi.SEDENTARY to mapOf(
-                PersonalGoalUi.MAINTAIN_WEIGHT to BigDecimal("1.2"),
-                PersonalGoalUi.LOSE_WEIGHT to BigDecimal("1.4"),
-                PersonalGoalUi.GAIN_MUSCLE_OR_WEIGHT to BigDecimal("1.6"),
-            ),
             ActivityLevelUi.LIGHTLY_ACTIVE to mapOf(
                 PersonalGoalUi.MAINTAIN_WEIGHT to BigDecimal("1.4"),
                 PersonalGoalUi.LOSE_WEIGHT to BigDecimal("1.6"),

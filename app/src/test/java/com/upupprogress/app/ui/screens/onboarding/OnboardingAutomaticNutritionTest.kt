@@ -73,7 +73,7 @@ class OnboardingAutomaticNutritionTest {
         val cases = listOf(
             form.copy(
                 ageYears = 78, heightCm = 100, weightHundredthsKg = 3_000,
-                activityLevel = ActivityLevelUi.SEDENTARY,
+                activityLevel = ActivityLevelUi.LIGHTLY_ACTIVE,
                 personalGoal = PersonalGoalUi.MAINTAIN_WEIGHT,
             ),
             form.copy(
@@ -100,7 +100,7 @@ class OnboardingAutomaticNutritionTest {
     @Test
     fun manualModeKeepsItsOwnValidationAndDoesNotReuseAutomaticEstimates() {
         val manual = form.copy(
-            ageYears = 18, heightCm = 100, weightHundredthsKg = 2_999,
+            ageYears = 79, heightCm = 100, weightHundredthsKg = 2_999,
             nutritionGoalMode = NutritionGoalModeUi.MANUAL,
             manualNutritionDraft = ManualNutritionDraft("2000", "100", "250", "65"),
         )

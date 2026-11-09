@@ -40,7 +40,10 @@ fun OnboardingScreen(
     onConfirm: (OnboardingFormState) -> Unit,
     modifier: Modifier = Modifier,
     email: String = "",
-    onEditAccount: () -> Unit = onBackToAccount,
+    onEditAccount: (() -> Unit)? = onBackToAccount,
+    submissionLabel: String = "Confirmar y crear cuenta",
+    submissionDescription: String = "Si necesitas confirmar el correo, vuelve a iniciar sesión para terminar de guardar tus datos.",
+    loadingMessage: String = "Creando tu cuenta…",
     isLoading: Boolean = false,
     errorMessage: String? = null,
 ) {
@@ -92,7 +95,7 @@ fun OnboardingScreen(
             Text(step.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (isLoading) {
                 CircularProgressIndicator()
-                Text("Creando tu cuenta…", modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                Text(loadingMessage, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             } else {
                 if (step == OnboardingStep.REVIEW) {
                     OnboardingReview(form, email, errors, editingSection,
@@ -113,7 +116,7 @@ fun OnboardingScreen(
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                 if (step == OnboardingStep.REVIEW) {
-                    Text("Por ahora solo se creará tu cuenta. Los datos personales y las metas aún no se guardarán.",
+                    Text(submissionDescription,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -130,7 +133,7 @@ fun OnboardingScreen(
                     },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                     shape = RoundedCornerShape(12.dp),
-                ) { Text(if (step == OnboardingStep.REVIEW) "Confirmar y crear cuenta" else "Continuar") }
+                ) { Text(if (step == OnboardingStep.REVIEW) submissionLabel else "Continuar") }
             }
         }
     }

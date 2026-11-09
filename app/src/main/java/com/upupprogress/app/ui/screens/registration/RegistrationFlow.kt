@@ -14,12 +14,13 @@ import androidx.compose.ui.tooling.preview.Preview
 /** La cuenta se crea únicamente al confirmar el resumen; los pasos comparten un borrador. */
 @Composable
 fun RegistrationFlow(
-    onSignUp: (String, String) -> Unit,
+    onSignUp: (String, String, OnboardingFormState) -> Unit,
     onBackToLogin: () -> Unit,
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
     errorMessage: String? = null,
     result: RegistrationResult? = null,
+    loadingMessage: String = "Creando tu cuenta…",
 ) {
     val fields = rememberRegistrationFields()
     var form by rememberSaveable(stateSaver = OnboardingFormSaver) { mutableStateOf(OnboardingFormState()) }
@@ -90,7 +91,7 @@ fun RegistrationFlow(
             onEditAccount = { showOnboarding = false; returnToReview = true },
             onConfirm = {
                 if (fields.isValid()) {
-                    onSignUp(fields.email.text.toString().trim(), fields.password.text.toString())
+                    onSignUp(fields.email.text.toString().trim(), fields.password.text.toString(), form)
                 } else {
                     accountMessage = "Revisa tus datos de acceso. Si la pantalla se recreó, vuelve a ingresar la contraseña por seguridad."
                     showOnboarding = false
@@ -99,6 +100,7 @@ fun RegistrationFlow(
             },
             modifier = modifier,
             email = fields.email.text.toString().trim(),
+            loadingMessage = loadingMessage,
             isLoading = isLoading,
             errorMessage = errorMessage,
         )
@@ -108,5 +110,5 @@ fun RegistrationFlow(
 @Preview(name = "Registro por pasos", showBackground = true, widthDp = 390, heightDp = 844)
 @Composable
 private fun RegistrationFlowPreview() {
-    UpUpProgressTheme { RegistrationFlow(onSignUp = { _, _ -> }, onBackToLogin = {}) }
+    UpUpProgressTheme { RegistrationFlow(onSignUp = { _, _, _ -> }, onBackToLogin = {}) }
 }
