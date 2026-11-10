@@ -1,7 +1,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const DAILY_LIMIT = 3;
+const DAILY_LIMIT = 10;
 const HISTORY_DAYS = 30;
 
 type TrainingSet = {
@@ -42,6 +42,65 @@ type ExerciseTrend = {
   }[];
   total_weight_change_kg: number | null;
   consecutive_weight_changes_kg: number[];
+};
+
+type FoodEntry = {
+  id: string;
+  consumed_on: string;
+  quantity: number | string;
+  unit: string;
+  energy_kcal_100_snapshot: number | string | null;
+  protein_g_100_snapshot: number | string | null;
+  carbs_g_100_snapshot: number | string | null;
+  fat_g_100_snapshot: number | string | null;
+};
+
+type WeightLog = {
+  measured_on: string;
+  weight_kg: number | string;
+};
+
+type GoalRecord = {
+  goal_type: string;
+  daily_calorie_target: number | null;
+  daily_protein_target_g: number | string | null;
+  daily_carbs_target_g: number | string | null;
+  daily_fat_target_g: number | string | null;
+  effective_at: string;
+};
+
+type NutritionMetric = "calories_kcal" | "protein_g" | "carbs_g" | "fat_g";
+
+type NutritionDay = {
+  date: string;
+  entries: number;
+  calories_kcal: number | null;
+  protein_g: number | null;
+  carbs_g: number | null;
+  fat_g: number | null;
+};
+
+type NutritionSummary = {
+  days_with_records: number;
+  entries_count: number;
+  days_with_complete_calorie_snapshots: number;
+  average_per_day_with_records: {
+    calories_kcal: number | null;
+    protein_g: number | null;
+    carbs_g: number | null;
+    fat_g: number | null;
+  };
+  last_7_days_with_records: NutritionDay[];
+  note: string;
+};
+
+type WeightTrend = {
+  measurements: number;
+  first_date: string | null;
+  first_kg: number | null;
+  last_date: string | null;
+  last_kg: number | null;
+  change_kg: number | null;
 };
 
 function json(body: unknown, status = 200): Response {
@@ -170,47 +229,272 @@ function buildTrends(
   });
 }
 
-// Construimos el resumen numérico sin depender de la IA.
+
 function buildFactualSummary(
   trends: ExerciseTrend[],
 ): string {
-  const descriptions = trends.slice(0, 3).map((trend) => {
+  return trends.slice(0, 3).map((trend) => {
     const first = trend.sessions[0];
     const last = trend.sessions[trend.sessions.length - 1];
 
     if (trend.session_count === 1) {
       return (
-        `${trend.exercise}: una sesión registrada, ` +
-        `con una carga máxima de ${formatKg(first.max_weight_kg)} ` +
-        `y ${first.reps_at_max_weight} repeticiones ` +
-        `en esa serie. Aún no hay suficientes sesiones ` +
-        `para establecer una tendencia.`
+        `${trend.exercise}: una sesión registrada con ` +
+        `${formatKg(first.max_weight_kg)} de carga máxima. ` +
+        `Aún no hay suficientes sesiones para establecer una tendencia.`
       );
     }
 
-    const totalChange = trend.total_weight_change_kg ?? 0;
-
-    const intermediateChanges =
-      trend.consecutive_weight_changes_kg
-        .map(signedKg)
-        .join(", ");
-
     return (
-      `${trend.exercise}: ${trend.session_count} registros. ` +
-      `La carga máxima registrada pasó de ` +
-      `${formatKg(first.max_weight_kg)} a ` +
+      `${trend.exercise}: ${trend.session_count} sesiones; ` +
+      `carga máxima de ${formatKg(first.max_weight_kg)} a ` +
       `${formatKg(last.max_weight_kg)} ` +
-      `(cambio total: ${signedKg(totalChange)}). ` +
-      `Cambios entre registros consecutivos: ` +
-      `${intermediateChanges}. ` +
+      `(variación ${signedKg(trend.total_weight_change_kg ?? 0)}). ` +
       `Repeticiones en la serie de mayor carga: ` +
       `${first.reps_at_max_weight} al inicio y ` +
       `${last.reps_at_max_weight} al final.`
     );
-  });
-
-  return descriptions.join(" ");
+  }).join(" ");
 }
+
+
+// El backend hace los cálculos; la IA solo interpreta evidencia.
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+function numericOrNull(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+const NUTRIENT_FIELDS: Record<NutritionMetric, keyof FoodEntry> = {
+  calories_kcal: "energy_kcal_100_snapshot",
+  protein_g: "protein_g_100_snapshot",
+  carbs_g: "carbs_g_100_snapshot",
+  fat_g: "fat_g_100_snapshot",
+};
+
+const NUTRIENT_KEYS = Object.keys(NUTRIENT_FIELDS) as NutritionMetric[];
+
+function buildNutritionSummary(entries: FoodEntry[]): NutritionSummary {
+  // 'Completo' aquí solo significa que todos los alimentos REGISTRADOS
+  // tienen valores para ese nutriente, NO que el usuario registró todo lo comido.
+  type DayAccumulator = {
+    entries: number;
+    totals: Record<NutritionMetric, number>;
+    validSnapshots: Record<NutritionMetric, boolean>;
+  };
+  const byDate = new Map<string, DayAccumulator>();
+
+  for (const entry of entries) {
+    const day = byDate.get(entry.consumed_on) ?? {
+      entries: 0,
+      totals: { calories_kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
+      validSnapshots: {
+        calories_kcal: true,
+        protein_g: true,
+        carbs_g: true,
+        fat_g: true,
+      },
+    };
+    day.entries++;
+    const quantity = numericOrNull(entry.quantity);
+    const validQuantity = quantity !== null && quantity > 0 &&
+      (entry.unit === "g" || entry.unit === "ml");
+
+    for (const metric of NUTRIENT_KEYS) {
+      const per100 = numericOrNull(entry[NUTRIENT_FIELDS[metric]]);
+      if (!validQuantity || per100 === null) {
+        day.validSnapshots[metric] = false;
+      } else {
+        day.totals[metric] += (quantity * per100) / 100;
+      }
+    }
+    byDate.set(entry.consumed_on, day);
+  }
+
+  const days: NutritionDay[] = Array.from(byDate.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, item]) => ({
+      date,
+      entries: item.entries,
+      calories_kcal: item.validSnapshots.calories_kcal
+        ? round2(item.totals.calories_kcal) : null,
+      protein_g: item.validSnapshots.protein_g
+        ? round2(item.totals.protein_g) : null,
+      carbs_g: item.validSnapshots.carbs_g
+        ? round2(item.totals.carbs_g) : null,
+      fat_g: item.validSnapshots.fat_g
+        ? round2(item.totals.fat_g) : null,
+    }));
+
+  const averages = {} as NutritionSummary["average_per_day_with_records"];
+  for (const metric of NUTRIENT_KEYS) {
+    const validDays = days.filter((day) => day[metric] !== null);
+    // Promedio solo de los días con datos nutricionales utilizables.
+    averages[metric] = validDays.length > 0
+      ? round2(validDays.reduce((sum, day) => sum + (day[metric] ?? 0), 0) /
+        validDays.length)
+      : null;
+  }
+
+  return {
+    days_with_records: days.length,
+    entries_count: entries.length,
+    days_with_complete_calorie_snapshots:
+      days.filter((day) => day.calories_kcal !== null).length,
+    average_per_day_with_records: averages,
+    last_7_days_with_records: days.slice(-7),
+    note: "Los totales representan solo alimentos registrados. " +
+      "Un día con registros NO acredita una alimentación diaria completa. " +
+      "Si falta un dato nutricional de un alimento, el total de ese " +
+      "nutriente para ese día se representa como null.",
+  };
+}
+
+function buildWeightTrend(logs: WeightLog[]): WeightTrend {
+  const valid = logs.map((log) => ({
+    date: log.measured_on,
+    kg: numericOrNull(log.weight_kg),
+  })).filter((log): log is { date: string; kg: number } =>
+    log.kg !== null && log.kg > 0
+  ).sort((a, b) => a.date.localeCompare(b.date));
+
+  const first = valid[0];
+  const last = valid[valid.length - 1];
+  return {
+    measurements: valid.length,
+    first_date: first?.date ?? null,
+    first_kg: first?.kg ?? null,
+    last_date: last?.date ?? null,
+    last_kg: last?.kg ?? null,
+    change_kg: valid.length >= 2 ? round2(last.kg - first.kg) : null,
+  };
+}
+
+function buildCombinedSummary(
+  goal: GoalRecord | null,
+  weight: WeightTrend,
+  nutrition: NutritionSummary,
+  trends: ExerciseTrend[],
+): string {
+  const goalNames: Record<string, string> = {
+    gain_muscle: "aumentar masa muscular",
+    lose_weight: "reducir peso",
+    maintain_weight: "mantener peso",
+  };
+  const parts: string[] = [];
+  if (goal) {
+    parts.push(`Objetivo vigente: ${goalNames[goal.goal_type] ?? goal.goal_type}.`);
+  }
+  if (weight.measurements >= 2 && weight.change_kg !== null) {
+    parts.push(
+      `Peso: ${weight.measurements} mediciones; ` +
+      `${formatKg(weight.first_kg!)} (${weight.first_date}) a ` +
+      `${formatKg(weight.last_kg!)} (${weight.last_date}), ` +
+      `variación ${signedKg(weight.change_kg)}. ` +
+      `El peso por sí solo no permite inferir cambios de músculo o grasa.`,
+    );
+  } else if (weight.measurements === 1) {
+    parts.push(`Peso: una medición de ${formatKg(weight.last_kg!)}; ` +
+      "aún no es posible establecer una tendencia.");
+  }
+  if (nutrition.days_with_records > 0) {
+    const average = nutrition.average_per_day_with_records.calories_kcal;
+    parts.push(
+      `Alimentación: ${nutrition.entries_count} registros de alimentación en ` +
+      `${nutrition.days_with_records} días con registros. ` +
+      (average === null ? "No hay datos calóricos completos de los productos registrados. " :
+        `Promedio de calorías registradas en días con datos utilizables: ${average} kcal. `) +
+      "Es un registro parcial posible, no una estimación de todo lo consumido.",
+    );
+  }
+  if (trends.length > 0) parts.push(buildFactualSummary(trends));
+  
+  let result = "";
+
+  for (const part of parts) {
+    const next = result ? `${result} ${part}` : part;
+
+    if (next.length > 1200) {
+      break;
+    }
+
+    result = next;
+  }
+
+  return result;
+
+}
+
+
+const ANALYSIS_SYSTEM_PROMPT =
+  "Eres un asistente de análisis de entrenamiento y nutrición " +
+  "de una aplicación de seguimiento físico. " +
+  "Responde en español de Chile con entre 1 y 3 sugerencias " +
+  "concretas, prudentes y personalizadas. " +
+
+  "Cada sugerencia debe estar fundamentada en al menos un dato " +
+  "disponible del usuario. Evita consejos genéricos que podrían " +
+  "aplicarse a cualquier persona. " +
+
+  "Analiza conjuntamente el objetivo vigente, las tendencias " +
+  "de entrenamiento, las mediciones de peso corporal y los " +
+  "registros de alimentación, cuando existan. " +
+
+  "Prioriza las observaciones según su importancia. " +
+  "Si aparece una variación de peso llamativa respecto al " +
+  "intervalo entre mediciones, recomienda verificar fechas, " +
+  "mediciones y condiciones del registro antes de interpretarla " +
+  "como progreso. Si el cambio es real o persiste, puede ser " +
+  "apropiado consultar a un profesional de salud. " +
+  "No diagnostiques ni atribuyas causas sin evidencia. " +
+
+  "Al analizar entrenamiento, considera conjuntamente las " +
+  "cargas, repeticiones y cantidad de sesiones. " +
+  "No interpretes un aumento pequeño de carga como prueba " +
+  "de ganancia muscular. No asegures que la progresión continuará. " +
+
+  "No presupongas que el usuario no realiza cardio, no descansa " +
+  "adecuadamente o no practica otras actividades simplemente " +
+  "porque no aparecen registradas. " +
+  "No recomiendes aumentar frecuencia, volumen o intensidad " +
+  "si los datos no justifican esa modificación. " +
+
+  "En nutrición, distingue siempre entre alimentos registrados " +
+  "y alimentación total. Un día con registros no demuestra " +
+  "que el usuario haya registrado todas sus comidas. " +
+  "Una meta calórica no equivale a calorías consumidas. " +
+  "No afirmes que existe déficit, superávit o cumplimiento " +
+  "de objetivos nutricionales a partir de registros parciales. " +
+
+  "Los promedios nutricionales corresponden solamente a los " +
+  "días con registros utilizables. No los presentes como " +
+  "promedios de todos los días del período. " +
+  "No compares registros históricos con una meta actual " +
+  "suponiendo que esa meta estuvo vigente anteriormente. " +
+
+  "El backend ya realizó los cálculos numéricos. " +
+  "No los recalcules ni inventes cifras o datos ausentes. " +
+  "No infieras pérdida de grasa, aumento de músculo, lesiones, " +
+  "fatiga, recuperación o calidad técnica sin evidencia. " +
+
+  "Si los registros son insuficientes o contradictorios, " +
+  "reconócelo y propone una forma concreta de mejorar " +
+  "el seguimiento. " +
+
+  "No generes rutinas completas, no hagas diagnósticos y " +
+  "no propongas restricciones calóricas extremas. " +
+  "Las sugerencias son opcionales y el usuario decide si " +
+  "las aplica. Nunca afirmes que modificaste sus registros, " +
+  "objetivos o rutinas. " +
+
+  "Devuelve únicamente las sugerencias solicitadas por el " +
+  "esquema JSON. Cada sugerencia debe tener como máximo " +
+  "250 caracteres y expresar una idea principal.";
+
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
@@ -269,9 +553,107 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // Buscar entrenamientos de los últimos 30 días.
-  const since = new Date();
-  since.setUTCDate(since.getUTCDate() - HISTORY_DAYS);
+
+  // Fechas UTC: 30 fechas de calendario contando el día de hoy.
+  const today = new Date();
+  const since = new Date(today);
+  since.setUTCDate(since.getUTCDate() - (HISTORY_DAYS - 1));
+  const sinceDate = since.toISOString().slice(0, 10);
+  const todayDate = today.toISOString().slice(0, 10);
+
+  // Consultar el contexto personal del usuario autenticado.
+  const [profileResult, goalResult, weightResult] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select("age_years, height_cm, sex_for_formula")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+
+      supabase
+        .from("user_goals")
+        .select(`
+          goal_type,
+          daily_calorie_target,
+          daily_protein_target_g,
+          daily_carbs_target_g,
+          daily_fat_target_g,
+          effective_at
+        `)
+        .eq("user_id", user.id)
+        .lte("effective_at", new Date().toISOString())
+        .order("effective_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+
+      supabase
+        .from("body_weight_logs")
+        .select("measured_on, weight_kg")
+        .eq("user_id", user.id)
+        .gte("measured_on", sinceDate)
+        .lte("measured_on", todayDate)
+        .order("measured_on", { ascending: true })
+        .limit(30),
+    ]);
+
+  if (
+    profileResult.error ||
+    goalResult.error ||
+    weightResult.error
+  ) {
+    console.error("Error consultando contexto del usuario", {
+      profile: profileResult.error?.code,
+      goal: goalResult.error?.code,
+      weight: weightResult.error?.code,
+    });
+
+    return json(
+      {
+        error: "No se pudo consultar el contexto del usuario",
+        code: "USER_CONTEXT_ERROR",
+      },
+      500,
+    );
+  }
+
+  const profile = profileResult.data;
+  const currentGoal = goalResult.data as GoalRecord | null;
+  const weightLogs = (weightResult.data ?? []) as WeightLog[];
+
+  // Paginar para no perder alimentos después de las primeras 1000 filas.
+  // Limitar a 5000 protege al servicio de historiales excesivos.
+  const nutritionRecords: FoodEntry[] = [];
+  const PAGE_SIZE = 500;
+  const MAX_FOOD_ENTRIES = 5000;
+  for (let offset = 0; offset < MAX_FOOD_ENTRIES; offset += PAGE_SIZE) {
+    const { data: page, error: foodError } = await supabase
+      .from("food_entries")
+      .select(`
+        id, consumed_on, quantity, unit,
+        energy_kcal_100_snapshot, protein_g_100_snapshot,
+        carbs_g_100_snapshot, fat_g_100_snapshot
+      `)
+      .eq("user_id", user.id)
+      .gte("consumed_on", sinceDate)
+      .lte("consumed_on", todayDate)
+      .order("consumed_on", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE_SIZE - 1);
+
+    if (foodError) {
+      console.error("Error consultando alimentación:", foodError.code, foodError.message);
+      return json({ error: "No se pudo consultar la alimentación", code: "FOOD_QUERY_ERROR" }, 500);
+    }
+    nutritionRecords.push(...(page ?? []) as FoodEntry[]);
+    if ((page ?? []).length < PAGE_SIZE) break;
+  }
+  if (nutritionRecords.length >= MAX_FOOD_ENTRIES) {
+    return json({
+      error: "El historial de alimentación supera el máximo analizable de 5000 registros",
+      code: "FOOD_HISTORY_TOO_LARGE",
+    }, 422);
+  }
 
   const { data, error: workoutsError } = await supabase
     .from("workout_sessions")
@@ -289,7 +671,8 @@ Deno.serve(async (req: Request) => {
       )
     `)
     .eq("user_id", user.id)
-    .gte("performed_on", since.toISOString().slice(0, 10))
+    .gte("performed_on", sinceDate)
+    .lte("performed_on", todayDate)
     .order("performed_on", { ascending: true })
     .limit(30);
 
@@ -313,21 +696,22 @@ Deno.serve(async (req: Request) => {
   const trends = buildTrends(sessions);
 
   const resetAt = getNextUtcMidnight();
+  const nutritionSummary = buildNutritionSummary(nutritionRecords);
+  const weightTrend = buildWeightTrend(weightLogs);
 
-  // Sin historial no gastamos solicitudes de Groq.
-  if (trends.length === 0) {
+  // Sin observaciones suficientes no se gasta la cuota de Groq.
+  // El perfil y la meta, por sí solos, no acreditan progreso.
+  if (trends.length === 0 && nutritionRecords.length === 0 &&
+      weightTrend.measurements < 2) {
     return json({
       ok: true,
       status: "no_data",
       source: "supabase",
       test_mode: false,
-      summary:
-        "Todavía no hay entrenamientos registrados " +
-        "en los últimos 30 días.",
-      suggestions: [
-        "Registra tus ejercicios, cargas y repeticiones " +
-        "para comenzar a analizar tu progreso.",
-      ],
+      summary: "Todavía no hay suficientes registros de entrenamiento, " +
+        "alimentación o evolución del peso para analizar tu progreso.",
+      suggestions: ["Registra entrenamientos, alimentos o al menos dos " +
+        "mediciones de peso para obtener sugerencias personalizadas."],
       quota: {
         limit: DAILY_LIMIT,
         remaining: null,
@@ -352,7 +736,9 @@ Deno.serve(async (req: Request) => {
         trend.consecutive_weight_changes_kg.slice(-7),
     }));
 
-  const summary = buildFactualSummary(trends);
+  const summary = buildCombinedSummary(
+    currentGoal, weightTrend, nutritionSummary, trends,
+  );
 
   // Consumir una solicitud ANTES de llamar a Groq.
   // Esta función SQL impide superar el límite diario.
@@ -374,18 +760,11 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  if (remaining === 0) {
-    // El valor 0 también se devuelve cuando se consume
-    // exitosamente la tercera solicitud.
-    // Para distinguir ambos casos, la función SQL
-    // se ajustará a devolver -1 al superar el límite.
-  }
-
   if (remaining < 0) {
     return json(
       {
         error:
-          "Alcanzaste el máximo de 3 análisis diarios",
+          "Alcanzaste el máximo de 10 análisis diarios",
         code: "DAILY_LIMIT_REACHED",
         quota: {
           limit: DAILY_LIMIT,
@@ -416,34 +795,16 @@ Deno.serve(async (req: Request) => {
           messages: [
             {
               role: "system",
-              content:
-                "Eres un asistente de análisis de entrenamientos. " +
-                "Responde siempre en español de Chile, " +
-                "con sugerencias breves, prudentes y concretas. " +
-                "Utiliza únicamente los registros proporcionados. " +
-                "Las diferencias de cargas fueron calculadas " +
-                "por el backend: no las recalcules. " +
-                "Nunca confundas el cambio total " +
-                "con cambios entre sesiones. " +
-                "No prescribas aumentos fijos de peso por semana. " +
-                "No asegures que una progresión continuará. " +
-                "No infieras fatiga, descanso, recuperación, " +
-                "lesiones ni calidad de la técnica si esos " +
-                "datos no fueron registrados. " +
-                "No afirmes mejoras de fuerza máxima " +
-                "a partir de estas cargas solamente. " +
-                "Cuando exista una sola sesión, " +
-                "evita afirmar tendencias. " +
-                "Sugiere opciones que el usuario puede evaluar, " +
-                "sin imponer cambios. " +
-                "No generes rutinas completas ni diagnósticos. " +
-                "Nunca digas que modificaste sus registros. " +
-                "Devuelve entre una y tres sugerencias.",
+              content: ANALYSIS_SYSTEM_PROMPT,
             },
             {
               role: "user",
               content: JSON.stringify({
                 period_days: HISTORY_DAYS,
+                profile: profile ?? null,
+                current_goal: currentGoal,
+                weight_trend: weightTrend,
+                nutrition_summary: nutritionSummary,
                 exercise_trends: selectedTrends,
               }),
             },
@@ -539,7 +900,7 @@ Deno.serve(async (req: Request) => {
       status: "analyzed",
       source: "groq",
       test_mode: false,
-      summary: summary.slice(0, 1200),
+      summary: summary,
       suggestions,
       quota: {
         limit: DAILY_LIMIT,
