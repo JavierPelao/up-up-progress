@@ -37,6 +37,10 @@ class FoodDiaryViewModelTest {
         var failLoads = false
         var wrongOwner = false
         override fun currentUserId() = actor
+        override suspend fun loadRecordedDates(start: LocalDate, end: LocalDate): Set<LocalDate> {
+            if (failLoads) throw IOException("offline")
+            return entries.filter { it.userId == actor && it.date in start..end }.map { it.date }.toSet()
+        }
         override suspend fun loadDay(date: LocalDate): FoodDay {
             if (failLoads) throw IOException("offline")
             return FoodDay(date, entries.filter { it.date == date && (wrongOwner || it.userId == actor) }, null)
@@ -60,6 +64,28 @@ class FoodDiaryViewModelTest {
 
     private fun entry(day: LocalDate = date) = FoodEntry("old", "owner", "p", day, MealType.BREAKFAST,
         BigDecimal("100"), "g", "Antes", product.perHundred)
+
+    @Test fun weeklyIndicatorsFollowRecordsSavingWeekChangesAndSignOut() = runTest {
+        val repo = FakeRepository(product).apply {
+            entries.add(entry(date.minusDays(1)))
+            entries.add(entry(date.minusDays(1)).copy(id = "second"))
+            entries.add(entry(date.minusWeeks(1)))
+        }
+        val vm = FoodDiaryViewModel(repo, { date }, { "new" })
+        vm.activate("owner"); advanceUntilIdle()
+        assertEquals(setOf(date.minusDays(1)), vm.uiState.value.recordedDates)
+        vm.startScan(); vm.barcodeScanned(product.barcode); advanceUntilIdle()
+        vm.saveFood(); advanceUntilIdle()
+        assertEquals(setOf(date.minusDays(1), date), vm.uiState.value.recordedDates)
+        vm.selectDate(date.minusWeeks(1)); advanceUntilIdle()
+        assertEquals(setOf(date.minusWeeks(1)), vm.uiState.value.recordedDates)
+        repo.failLoads = true
+        vm.refresh(); advanceUntilIdle()
+        assertEquals(setOf(date.minusWeeks(1)), vm.uiState.value.recordedDates)
+        assertNotNull(vm.uiState.value.weekError)
+        vm.clear(); advanceUntilIdle()
+        assertTrue(vm.uiState.value.recordedDates.isEmpty())
+    }
 
     @Test fun addingToPastDateDoesNotChangeTodaysTotals() = runTest {
         val repo = FakeRepository(product)

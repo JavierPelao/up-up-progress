@@ -37,14 +37,14 @@ fun NutritionSummaryCard(
     val calorieGoal = targets?.caloriesKcal?.toBigDecimal()
     val remaining = if (calorieGoal != null && consumed?.calories != null) calorieGoal - consumed.calories else null
     Card(
-        modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
+        modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text("Calorías", style = MaterialTheme.typography.bodyMedium)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Calorías", style = MaterialTheme.typography.bodyLarge)
                     Text(
                         "${formatFoodNumber(consumed?.calories)} / ${formatFoodNumber(calorieGoal)}",
                         style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
@@ -64,7 +64,7 @@ fun NutritionSummaryCard(
                 }
             }
             NutrientProgress(consumed?.calories, calorieGoal, MaterialTheme.colorScheme.primary)
-            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 SummaryMacro("Proteínas", consumed?.protein, targets?.proteinGrams,
                     MaterialTheme.colorScheme.primary, Modifier.weight(1f))
                 SummaryMacro("Carbohidratos", consumed?.carbs, targets?.carbsGrams,
@@ -83,7 +83,7 @@ fun NutritionSummaryCard(
 @Composable
 private fun SummaryMacro(label: String, consumed: BigDecimal?, goal: BigDecimal?, color: Color, modifier: Modifier) {
     Column(modifier.fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("${formatFoodNumber(consumed)} / ${formatFoodNumber(goal)} g", modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
         NutrientProgress(consumed, goal, color)

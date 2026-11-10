@@ -16,6 +16,8 @@ data class FoodDiaryUiState(
     val todayDate: LocalDate = LocalDate.now(),
     val selectedDate: LocalDate = todayDate,
     val selectedDay: FoodDay? = null,
+    val recordedDates: Set<LocalDate> = emptySet(),
+    val weekError: String? = null,
     val today: FoodDay? = null,
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -41,6 +43,7 @@ class FoodDiaryViewModel internal constructor(
     val uiState = mutableState.asStateFlow()
     private var owner: String? = null
     private var loadJob: Job? = null
+    private var weekJob: Job? = null
     private var lookupJob: Job? = null
     private var saveJob: Job? = null
     private var saveRequest: FoodEntryRequest? = null
@@ -54,6 +57,7 @@ class FoodDiaryViewModel internal constructor(
 
     fun clear() {
         loadJob?.cancel()
+        weekJob?.cancel()
         lookupJob?.cancel()
         saveJob?.cancel()
         saveRequest = null
@@ -66,6 +70,8 @@ class FoodDiaryViewModel internal constructor(
         val state = mutableState.value
         val current = today()
         mutableState.value = state.copy(selectedDate = date, selectedDay = null, todayDate = current,
+            recordedDates = if (nutritionWeekStart(date) == nutritionWeekStart(state.selectedDate))
+                state.recordedDates else emptySet(),
             today = if (current == state.todayDate) state.today else null)
         refresh()
     }
@@ -78,14 +84,42 @@ class FoodDiaryViewModel internal constructor(
             val selected = if (state.selectedDate == state.todayDate || state.selectedDate > current) current else state.selectedDate
             mutableState.value = state.copy(
                 todayDate = current, selectedDate = selected, today = null,
+                recordedDates = if (nutritionWeekStart(selected) == nutritionWeekStart(state.selectedDate))
+                    state.recordedDates else emptySet(),
                 selectedDay = if (selected == state.selectedDate) state.selectedDay else null,
             )
             refresh()
         } else if (loadJob?.isActive != true) refresh()
     }
 
+    private fun refreshWeek(userId: String) {
+        weekJob?.cancel()
+        val start = nutritionWeekStart(mutableState.value.selectedDate)
+        val end = minOf(start.plusDays(6), mutableState.value.todayDate)
+        mutableState.value = mutableState.value.copy(weekError = null)
+        weekJob = viewModelScope.launch {
+            try {
+                val dates = withTimeout(30_000L) { repository.loadRecordedDates(start, end) }
+                ensureOwner(userId)
+                check(dates.all { it in start..end })
+                if (nutritionWeekStart(mutableState.value.selectedDate) == start) {
+                    mutableState.value = mutableState.value.copy(recordedDates = dates, weekError = null)
+                }
+            } catch (error: CancellationException) {
+                if (error is TimeoutCancellationException) weekFailed(userId) else throw error
+            } catch (_: Exception) { weekFailed(userId) }
+        }
+    }
+
+    private fun weekFailed(userId: String) {
+        if (owner == userId) mutableState.value = mutableState.value.copy(
+            weekError = "No se pudieron actualizar los indicadores de alimentos de la semana.",
+        )
+    }
+
     fun refresh() {
         val userId = owner ?: return
+        refreshWeek(userId)
         loadJob?.cancel()
         val date = mutableState.value.selectedDate
         val current = mutableState.value.todayDate
@@ -190,6 +224,8 @@ class FoodDiaryViewModel internal constructor(
                 val latest = mutableState.value
                 mutableState.value = latest.copy(
                     selectedDay = latest.selectedDay.includingEntry(entry.date),
+                    recordedDates = if (nutritionWeekStart(entry.date) == nutritionWeekStart(latest.selectedDate))
+                        latest.recordedDates + entry.date else latest.recordedDates,
                     today = latest.today.includingEntry(entry.date),
                     product = null, pendingDate = null, isSaving = false, saveAttempted = false, dialogError = null,
                 )

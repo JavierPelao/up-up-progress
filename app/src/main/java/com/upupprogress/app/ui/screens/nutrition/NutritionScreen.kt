@@ -11,8 +11,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -24,8 +22,6 @@ import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.Instant
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,16 +38,16 @@ fun NutritionScreen(
             Modifier.widthIn(max = 600.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { onDateSelected(state.selectedDate.minusDays(1)) },
-                    modifier = Modifier.semantics { contentDescription = "Día anterior" }) { Text("‹") }
-                TextButton(onClick = { calendarOpen = true }, modifier = Modifier.weight(1f)) {
-                    Text(state.selectedDate.format(DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("es-CL"))))
-                }
-                IconButton(onClick = { onDateSelected(state.selectedDate.plusDays(1)) },
-                    enabled = state.selectedDate < state.todayDate,
-                    modifier = Modifier.semantics { contentDescription = "Día siguiente" }) { Text("›") }
-                TextButton(onClick = { onDateSelected(state.todayDate) }, enabled = state.selectedDate != state.todayDate) { Text("Hoy") }
+            NutritionWeekSelector(
+                selectedDate = state.selectedDate,
+                today = state.todayDate,
+                recordedDates = state.recordedDates,
+                onDateSelected = onDateSelected,
+                onOpenCalendar = { calendarOpen = true },
+            )
+            state.weekError?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = onRefresh) { Text("Reintentar indicadores") }
             }
             NutritionSummaryCard(state.selectedDay?.consumed, state.selectedDay?.targets)
             FoodDiaryStatus(state.isLoading, state.error, onRefresh)

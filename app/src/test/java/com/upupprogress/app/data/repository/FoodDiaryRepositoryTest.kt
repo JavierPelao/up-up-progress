@@ -39,6 +39,31 @@ class FoodDiaryRepositoryTest {
         install(Postgrest) { requireValidSession = false }
     }
 
+    @Test fun weeklyIndicatorsFilterOwnerAndDatesAndIncludeRecordsBeyondTheFirstPage() = runTest {
+        var calls = 0
+        val start = LocalDate.of(2026, 11, 2)
+        val end = start.plusDays(6)
+        val firstPage = List(500) { """{"consumed_on":"$start"}""" }.joinToString(",", "[", "]")
+        val engine = MockEngine { request ->
+            calls++
+            assertEquals("/rest/v1/food_entries", request.url.encodedPath)
+            assertEquals("consumed_on", request.url.parameters["select"])
+            assertEquals("eq.$user", request.url.parameters["user_id"])
+            assertEquals(
+                "(consumed_on.gte.$start,consumed_on.lte.$end)", request.url.parameters["and"],
+            )
+            respond(
+                if (calls == 1) firstPage else """[{"consumed_on":"${start.plusDays(2)}"}]""",
+                HttpStatusCode.OK, jsonHeaders,
+            )
+        }
+        val client = client(engine)
+        try {
+            assertEquals(setOf(start, start.plusDays(2)), FoodDiaryRepository(client, { user }).loadRecordedDates(start, end))
+            assertEquals(2, calls)
+        } finally { client.close() }
+    }
+
     @Test fun lookupUsesGetAndPreservesLeadingZerosInTheQuery() = runTest {
         val engine = MockEngine { request ->
             assertEquals(HttpMethod.Get, request.method)

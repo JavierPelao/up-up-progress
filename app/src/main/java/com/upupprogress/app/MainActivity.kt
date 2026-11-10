@@ -5,6 +5,8 @@ import com.upupprogress.app.ui.screens.nutrition.*
 import java.time.LocalDate
 import com.upupprogress.app.ui.screens.training.TrainingScreen
 import com.upupprogress.app.ui.screens.profile.ProfileScreen
+import com.upupprogress.app.ui.screens.progress.ProgressScreen
+import com.upupprogress.app.ui.screens.progress.ProgressViewModel
 import com.upupprogress.app.ui.components.AppHeader
 import com.upupprogress.app.ui.components.AppBottomBar
 import com.upupprogress.app.ui.components.AppDestination
@@ -49,6 +51,7 @@ class MainActivity : ComponentActivity() {
     private val loginViewModel: LoginViewModel by viewModels()
     private val registrationViewModel: RegistrationViewModel by viewModels()
     private val foodDiaryViewModel: FoodDiaryViewModel by viewModels()
+    private val progressViewModel: ProgressViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,6 +61,7 @@ class MainActivity : ComponentActivity() {
                 val loginState by loginViewModel.uiState.collectAsStateWithLifecycle()
                 val registrationState by registrationViewModel.uiState.collectAsStateWithLifecycle()
                 val foodState by foodDiaryViewModel.uiState.collectAsStateWithLifecycle()
+                val progressState by progressViewModel.uiState.collectAsStateWithLifecycle()
                 val canEnterHome = loginState.isAuthenticated &&
                     registrationState.setupPhase == AccountSetupPhase.COMPLETE && !registrationState.showSavedConfirmation
                 var showRegistration by rememberSaveable { mutableStateOf(false) }
@@ -107,8 +111,13 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(canEnterHome, registrationState.savedStatus?.userId) {
                     if (canEnterHome) {
-                        foodDiaryViewModel.activate(requireNotNull(registrationState.savedStatus?.userId))
-                    } else if (!loginState.isAuthenticated) foodDiaryViewModel.clear()
+                        val userId = requireNotNull(registrationState.savedStatus?.userId)
+                        foodDiaryViewModel.activate(userId)
+                        progressViewModel.activate(userId)
+                    } else if (!loginState.isAuthenticated) {
+                        foodDiaryViewModel.clear()
+                        progressViewModel.clear()
+                    }
                 }
                 if (canEnterHome) ObserveFoodDate(foodDiaryViewModel::onClockChanged)
 
@@ -155,12 +164,7 @@ class MainActivity : ComponentActivity() {
                             AppBottomBar(
                                 selectedDestination = selectedDestination,
                                 onDestinationSelected = { destination ->
-                                    when (destination) {
-                                        AppDestination.HOME, AppDestination.TRAINING, AppDestination.NUTRITION ->
-                                            selectedDestination = destination
-                                        AppDestination.PROGRESS ->
-                                            showPendingFeature("Progreso estará disponible próximamente.")
-                                    }
+                                    selectedDestination = destination
                                 }
                             )
                         }
@@ -222,7 +226,13 @@ class MainActivity : ComponentActivity() {
                                             onRefresh = foodDiaryViewModel::refresh,
                                             modifier = screenModifier,
                                         )
-                                    AppDestination.PROGRESS -> Unit
+                                    AppDestination.PROGRESS ->
+                                        ProgressScreen(
+                                            state = progressState,
+                                            onAnalyze = progressViewModel::analyze,
+                                            onDismissResult = progressViewModel::dismissResult,
+                                            modifier = screenModifier,
+                                        )
                                 }
                             }
                         }

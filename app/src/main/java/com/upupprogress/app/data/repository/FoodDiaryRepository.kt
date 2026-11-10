@@ -23,6 +23,7 @@ import kotlinx.serialization.json.*
 interface FoodDiaryGateway {
     fun currentUserId(): String?
     suspend fun loadDay(date: LocalDate): FoodDay
+    suspend fun loadRecordedDates(start: LocalDate, end: LocalDate): Set<LocalDate>
     suspend fun lookup(barcode: String): FoodProduct
     suspend fun record(request: FoodEntryRequest): FoodEntry
 }
@@ -59,6 +60,35 @@ class FoodDiaryRepository internal constructor(
         }
         ensureActor(userId)
         return FoodProduct.fromJson(Json.parseToJsonElement(response.bodyAsText()).jsonObject, barcode)
+    }
+
+    override suspend fun loadRecordedDates(start: LocalDate, end: LocalDate): Set<LocalDate> {
+        require(end >= start && end <= start.plusDays(6))
+        val userId = actor()
+        val dates = mutableSetOf<LocalDate>()
+        var offset = 0L
+        do {
+            val page = client.from("food_entries").select(Columns.raw("consumed_on")) {
+                filter {
+                    eq("user_id", userId)
+                    and {
+                        gte("consumed_on", start.toString())
+                        lte("consumed_on", end.toString())
+                    }
+                }
+                order("consumed_on", Order.ASCENDING)
+                order("id", Order.ASCENDING)
+                range(offset, offset + 499)
+            }.decodeList<JsonObject>()
+            ensureActor(userId)
+            page.forEach {
+                val date = LocalDate.parse(requireNotNull(it.string("consumed_on")))
+                check(date in start..end)
+                dates.add(date)
+            }
+            offset += 500
+        } while (page.size == 500)
+        return dates
     }
 
     override suspend fun loadDay(date: LocalDate): FoodDay {
