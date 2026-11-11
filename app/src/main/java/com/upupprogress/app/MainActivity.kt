@@ -3,7 +3,9 @@ package com.upupprogress.app
 import com.upupprogress.app.ui.screens.home.HomeScreen
 import com.upupprogress.app.ui.screens.nutrition.*
 import java.time.LocalDate
-import com.upupprogress.app.ui.screens.training.TrainingScreen
+import com.upupprogress.app.ui.screens.training.TrainingFlow
+import com.upupprogress.app.ui.screens.training.TrainingViewModel
+import com.upupprogress.app.ui.screens.training.TrainingPage
 import com.upupprogress.app.ui.screens.profile.ProfileScreen
 import com.upupprogress.app.ui.screens.progress.ProgressScreen
 import com.upupprogress.app.ui.screens.progress.ProgressViewModel
@@ -52,6 +54,7 @@ class MainActivity : ComponentActivity() {
     private val registrationViewModel: RegistrationViewModel by viewModels()
     private val foodDiaryViewModel: FoodDiaryViewModel by viewModels()
     private val progressViewModel: ProgressViewModel by viewModels()
+    private val trainingViewModel: TrainingViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,6 +65,7 @@ class MainActivity : ComponentActivity() {
                 val registrationState by registrationViewModel.uiState.collectAsStateWithLifecycle()
                 val foodState by foodDiaryViewModel.uiState.collectAsStateWithLifecycle()
                 val progressState by progressViewModel.uiState.collectAsStateWithLifecycle()
+                val trainingState by trainingViewModel.uiState.collectAsStateWithLifecycle()
                 val canEnterHome = loginState.isAuthenticated &&
                     registrationState.setupPhase == AccountSetupPhase.COMPLETE && !registrationState.showSavedConfirmation
                 var showRegistration by rememberSaveable { mutableStateOf(false) }
@@ -92,6 +96,7 @@ class MainActivity : ComponentActivity() {
 
                 fun returnToPreviousScreen() {
                     if (showProfile) showProfile = false
+                    else if (selectedDestination == AppDestination.TRAINING && trainingViewModel.back()) return
                     else selectedDestination = AppDestination.HOME
                 }
 
@@ -114,12 +119,17 @@ class MainActivity : ComponentActivity() {
                         val userId = requireNotNull(registrationState.savedStatus?.userId)
                         foodDiaryViewModel.activate(userId)
                         progressViewModel.activate(userId)
+                        trainingViewModel.activate(userId)
                     } else if (!loginState.isAuthenticated) {
                         foodDiaryViewModel.clear()
                         progressViewModel.clear()
+                        trainingViewModel.clear()
                     }
                 }
-                if (canEnterHome) ObserveFoodDate(foodDiaryViewModel::onClockChanged)
+                if (canEnterHome) ObserveFoodDate {
+                    foodDiaryViewModel.onClockChanged()
+                    trainingViewModel.onClockChanged()
+                }
 
                 LaunchedEffect(loginState.isAuthenticated, loginState.errorMessage) {
                     val message = loginState.errorMessage
@@ -149,6 +159,9 @@ class MainActivity : ComponentActivity() {
                             AppHeader(
                                 title = when {
                                     showProfile -> "Perfil"
+                                    selectedDestination == AppDestination.TRAINING && trainingState.page == TrainingPage.CREATE ->
+                                        if (trainingState.editingRoutineId != null) "Editar rutina" else "Crear rutina"
+                                    selectedDestination == AppDestination.TRAINING && trainingState.page == TrainingPage.ROUTINE_DETAILS -> "Detalle de rutina"
                                     selectedDestination == AppDestination.HOME -> "Up Up Progress"
                                     else -> selectedDestination.label
                                 },
@@ -160,10 +173,11 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     bottomBar = {
-                        if (canEnterHome && !showProfile) {
+                        if (canEnterHome && !showProfile && !(selectedDestination == AppDestination.TRAINING && trainingState.page == TrainingPage.CREATE)) {
                             AppBottomBar(
                                 selectedDestination = selectedDestination,
                                 onDestinationSelected = { destination ->
+                                    if (destination == AppDestination.TRAINING) trainingViewModel.enterRoutines()
                                     selectedDestination = destination
                                 }
                             )
@@ -203,20 +217,23 @@ class MainActivity : ComponentActivity() {
                                             onRetryNutrition = foodDiaryViewModel::refresh,
                                             onRegisterFood = ::registerFoodToday,
                                             onCreateRoutine = {
-                                                showPendingFeature("La creación de rutinas estará disponible próximamente.")
+                                                selectedDestination = AppDestination.TRAINING
+                                                trainingViewModel.startCreate()
+                                            },
+                                            hasRoutines = trainingState.routines.isNotEmpty(),
+                                            todayRoutineName = trainingState.todaySessions.firstOrNull()?.routineName,
+                                            onOpenTraining = {
+                                                selectedDestination = AppDestination.TRAINING
+                                                trainingViewModel.openToday()
                                             },
                                             onViewNutrition = ::showNutritionToday,
                                             modifier = screenModifier,
                                         )
                                     AppDestination.TRAINING ->
-                                        TrainingScreen(
+                                        TrainingFlow(
+                                            state = trainingState,
+                                            viewModel = trainingViewModel,
                                             modifier = screenModifier,
-                                            onCreateRoutine = {
-                                                showPendingFeature("La creación de rutinas estará disponible próximamente.")
-                                            },
-                                            onViewRoutine = { _, _ ->
-                                                showPendingFeature("El registro del entrenamiento estará disponible próximamente.")
-                                            }
                                         )
                                     AppDestination.NUTRITION ->
                                         NutritionScreen(

@@ -30,6 +30,9 @@ fun HomeScreen(
     onCreateRoutine: () -> Unit,
     onViewNutrition: () -> Unit,
     modifier: Modifier = Modifier,
+    hasRoutines: Boolean = false,
+    todayRoutineName: String? = null,
+    onOpenTraining: () -> Unit = onCreateRoutine,
 ) {
     Column(
         modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -37,7 +40,7 @@ fun HomeScreen(
     ) {
         Text("¡Hola!", style = MaterialTheme.typography.headlineMedium)
         Text("Cada registro cuenta.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        WorkoutTodayCard(onCreateRoutine)
+        WorkoutTodayCard(onCreateRoutine, onOpenTraining, hasRoutines, todayRoutineName)
         Column(Modifier.padding(top = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Nutrición de hoy", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
@@ -52,7 +55,10 @@ fun HomeScreen(
 
 @Composable
 private fun WorkoutTodayCard(
-    onCreateRoutine: () -> Unit
+    onCreateRoutine: () -> Unit,
+    onOpenTraining: () -> Unit,
+    hasRoutines: Boolean,
+    todayRoutineName: String?,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -69,19 +75,19 @@ private fun WorkoutTodayCard(
                 color = MaterialTheme.colorScheme.onPrimary
             )
             Text(
-                text = "Tu rutina aún no ha sido creada, pincha el botón de abajo para crear rutina.",
+                text = todayRoutineName ?: if (hasRoutines) "Selecciona una rutina para realizar hoy." else "Tu rutina aún no ha sido creada, pincha el botón de abajo para crear rutina.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimary
             )
             Button(
-                onClick = onCreateRoutine,
+                onClick = if (hasRoutines || todayRoutineName != null) onOpenTraining else onCreateRoutine,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
-            ) { Text("Crear rutina") }
+            ) { Text(if (todayRoutineName != null) "Ver entrenamiento" else if (hasRoutines) "Elegir rutina" else "Crear rutina") }
         }
     }
 }
