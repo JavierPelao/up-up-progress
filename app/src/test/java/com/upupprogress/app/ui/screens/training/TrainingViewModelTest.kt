@@ -42,6 +42,10 @@ class TrainingViewModelTest {
         override fun currentUserId() = user
         override suspend fun loadRoutines() = plans.toList()
         override suspend fun loadCatalog() = emptyList<ExerciseCatalogItem>()
+        override suspend fun loadRecordedExercises(throughInclusive: LocalDate) = emptyList<RecordedExercise>()
+        override suspend fun loadExerciseHistory(
+            exerciseId: String, fromInclusive: LocalDate, throughInclusive: LocalDate,
+        ) = emptyList<ExerciseSetRecord>()
         override suspend fun loadSessions(date: LocalDate, routines: List<RoutinePlan>): List<WorkoutSession> {
             if (failSessionLoads) throw IOException("synthetic failed session load")
             return sessions.values.filter { it.performedOn == date.toString() }

@@ -14,8 +14,15 @@ import kotlinx.serialization.json.*
 import java.math.BigDecimal
 import java.time.LocalDate
 
-interface TrainingGateway {
+interface TrainingProgressGateway {
     fun currentUserId(): String?
+    suspend fun loadRecordedExercises(throughInclusive: LocalDate): List<RecordedExercise>
+    suspend fun loadExerciseHistory(
+        exerciseId: String, fromInclusive: LocalDate, throughInclusive: LocalDate,
+    ): List<ExerciseSetRecord>
+}
+
+interface TrainingGateway : TrainingProgressGateway {
     suspend fun loadRoutines(): List<RoutinePlan>
     suspend fun loadCatalog(): List<ExerciseCatalogItem>
     suspend fun loadSessions(date: LocalDate, routines: List<RoutinePlan>): List<WorkoutSession>
@@ -29,12 +36,19 @@ interface TrainingGateway {
 }
 
 private const val ROUTINE_COLUMNS = "id,user_id,name,description,routine_exercises(id,exercise_id,position,planned_sets,planned_reps,exercises(name))"
+// Paginar las series como raíz evita recortar un historial largo en una relación anidada.
+private const val HISTORY_COLUMNS = "id,workout_exercise_id,set_number,weight_kg,reps," +
+    "workout_exercises!inner(id,session_id,exercise_id,completion_status,exercises(name)," +
+    "workout_sessions!inner(id,user_id,routine_id,performed_on))"
 private const val SESSION_COLUMNS = "id,user_id,routine_id,performed_on,routines(id,name,description,routine_exercises(id,exercise_id,position,planned_sets,planned_reps,exercises(name))),workout_exercises(id,exercise_id,position,completion_status,exercises(name),performed_sets(id,set_number,weight_kg,reps))"
 
 class TrainingRepository internal constructor(
     private val client: SupabaseClient,
     private val actorId: () -> String?,
+    private val historyPageSize: Int,
 ) : TrainingGateway {
+    init { require(historyPageSize in 1..500) }
+    internal constructor(client: SupabaseClient, actorId: () -> String?) : this(client, actorId, 500)
     constructor() : this(SupabaseClientProvider.client, { SupabaseClientProvider.client.auth.currentUserOrNull()?.id })
     override fun currentUserId(): String? = actorId()
     private fun actor() = checkNotNull(currentUserId()) { "Inicia sesión para continuar." }
@@ -93,6 +107,84 @@ class TrainingRepository internal constructor(
             rows.addAll(page); offset += 200
         } while (page.size == 200)
         return rows.map { session(it, routines) }
+    }
+
+    /** El selector usa historial, nunca ejercicios solo planificados ni el catálogo general. */
+    override suspend fun loadRecordedExercises(throughInclusive: LocalDate): List<RecordedExercise> {
+        val owner = actor()
+        val recorded = mutableListOf<RecordedExercise>()
+        var offset = 0L
+        do {
+            val page = client.from("workout_exercises").select(Columns.raw(
+                "id,session_id,exercise_id,exercises(name)," +
+                    "workout_sessions!inner(id,user_id,performed_on),performed_sets!inner(id)",
+            )) {
+                filter {
+                    eq("workout_sessions.user_id", owner)
+                    lte("workout_sessions.performed_on", throughInclusive.toString())
+                }
+                order("id", Order.ASCENDING)
+                range(offset, offset + historyPageSize - 1)
+            }.decodeList<JsonObject>()
+            ensureActor(owner)
+            recorded.addAll(page.map { row ->
+                val session = checkNotNull(row.child("workout_sessions"))
+                val date = LocalDate.parse(session.required("performed_on"))
+                check(session.required("user_id") == owner && date <= throughInclusive)
+                check(row.required("session_id") == session.required("id"))
+                check(row.objects("performed_sets").isNotEmpty())
+                RecordedExercise(row.required("exercise_id"),
+                    row.child("exercises")?.value("name") ?: "Ejercicio", date)
+            })
+            offset += page.size
+        } while (page.isNotEmpty())
+        return recorded.groupBy { it.id }.values.map { rows ->
+            rows.first().copy(firstPerformedOn = rows.minOf { it.firstPerformedOn })
+        }.sortedWith(compareBy<RecordedExercise> { it.name.lowercase() }.thenBy { it.id })
+    }
+
+    /** Solo lectura; incluye pending/skipped porque ambos pueden conservar series efectivas. */
+    override suspend fun loadExerciseHistory(
+        exerciseId: String, fromInclusive: LocalDate, throughInclusive: LocalDate,
+    ): List<ExerciseSetRecord> {
+        require(exerciseId.isNotBlank() && !throughInclusive.isBefore(fromInclusive))
+        val owner = actor()
+        val result = mutableListOf<ExerciseSetRecord>()
+        var offset = 0L
+        do {
+            val page = client.from("performed_sets").select(Columns.raw(HISTORY_COLUMNS)) {
+                filter {
+                    eq("workout_exercises.exercise_id", exerciseId)
+                    eq("workout_exercises.workout_sessions.user_id", owner)
+                    // Agrupar los límites conserva ambos filtros sobre la misma columna en el SDK.
+                    and(referencedTable = "workout_exercises.workout_sessions") {
+                        gte("performed_on", fromInclusive.toString())
+                        lte("performed_on", throughInclusive.toString())
+                    }
+                }
+                order("id", Order.ASCENDING)
+                range(offset, offset + historyPageSize - 1)
+            }.decodeList<JsonObject>()
+            ensureActor(owner)
+            result.addAll(page.map { row ->
+                val exercise = checkNotNull(row.child("workout_exercises"))
+                val session = checkNotNull(exercise.child("workout_sessions"))
+                val date = LocalDate.parse(session.required("performed_on"))
+                check(session.required("user_id") == owner && exercise.required("exercise_id") == exerciseId)
+                check(date in fromInclusive..throughInclusive)
+                check(row.required("workout_exercise_id") == exercise.required("id") &&
+                    exercise.required("session_id") == session.required("id"))
+                ExerciseSetRecord(
+                    userId = owner, sessionId = session.required("id"), routineId = session.value("routine_id"),
+                    performedOn = date, workoutExerciseId = exercise.required("id"), exerciseId = exerciseId,
+                    exerciseName = exercise.child("exercises")?.value("name") ?: "Ejercicio",
+                    completionStatus = exercise.value("completion_status") ?: "pending", set = recordedSet(row),
+                )
+            })
+            // Continuar hasta una página vacía también respeta límites del servidor menores que 500.
+            offset += page.size
+        } while (page.isNotEmpty())
+        return result
     }
 
     override suspend fun saveRoutine(draft: RoutineDraft): RoutinePlan {

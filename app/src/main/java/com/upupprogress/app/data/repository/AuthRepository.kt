@@ -6,15 +6,17 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import io.github.jan.supabase.SupabaseClient
 
 interface RegistrationAuthGateway {
     fun currentAccount(): AuthenticatedAccount?
     suspend fun signUp(email: String, password: String): RegistrationResult
 }
 
-class AuthRepository : RegistrationAuthGateway {
-
-    private val supabase = SupabaseClientProvider.client
+class AuthRepository internal constructor(private val supabase: SupabaseClient) : RegistrationAuthGateway {
+    constructor() : this(SupabaseClientProvider.client)
 
     val sessionStatus: StateFlow<SessionStatus>
         get() = supabase.auth.sessionStatus
@@ -54,7 +56,12 @@ class AuthRepository : RegistrationAuthGateway {
     }
 
     suspend fun signOut() {
-        supabase.auth.signOut()
+        try {
+            supabase.auth.signOut()
+        } finally {
+            // Cerrar sesión debe retirar también el acceso local si no hay conexión.
+            withContext(NonCancellable) { supabase.auth.clearSession() }
+        }
     }
 }
 

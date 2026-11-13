@@ -44,12 +44,25 @@ fun WorkoutScreen(
     onRefresh: () -> Unit = {},
 ) {
     val session = state.activeSession
+    var confirmChange by rememberSaveable(session?.id) { mutableStateOf(false) }
+    if (confirmChange && session != null) AlertDialog(
+        onDismissRequest = { confirmChange = false },
+        title = { Text("¿Cambiar de rutina?") },
+        text = { Text("¿Estás seguro de que deseas cambiar de rutina? El progreso de la rutina actual se perderá cuando selecciones otra.") },
+        confirmButton = {
+            TextButton(enabled = !state.isBusy && !state.pendingSeries, onClick = {
+                confirmChange = false
+                onChangeRoutine()
+            }) { Text("Aceptar") }
+        },
+        dismissButton = { TextButton(onClick = { confirmChange = false }) { Text("Cancelar") } },
+    )
     val editable = state.selectedDate == state.today && !state.isBusy && state.selectionRequest == null
     LazyColumn(
         modifier.fillMaxSize().imePadding(), contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item { TrainingDateHeader(state.selectedDate, state.today, onDateSelected) }
+        item { TrainingDateHeader(state.selectedDate, state.today, onDateSelected, showReturnToToday = session == null) }
         if (state.isLoading || state.isBusy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
         if (session == null && !state.isLoading) item {
             Text("Actualiza la lista para consultar el entrenamiento.")
@@ -63,25 +76,31 @@ fun WorkoutScreen(
             item {
                 Card(
                     Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         val day = state.selectedDate.dayOfWeek
                             .getDisplayName(TextStyle.FULL, Locale.forLanguageTag("es-CL"))
                             .replaceFirstChar { it.titlecase(Locale.forLanguageTag("es-CL")) }
-                        Text("$day · ${session.routineName}", style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold)
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("$day · ${session.routineName}", Modifier.weight(1f),
+                                style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            if (state.selectedDate == state.today) TextButton(
+                                onClick = {
+                                    if (session.hasRecordedData) confirmChange = true else onChangeRoutine()
+                                },
+                                enabled = editable && !state.pendingSeries,
+                                modifier = Modifier.widthIn(max = 128.dp),
+                            ) { Text("Cambiar rutina") }
+                            else TextButton(onClick = { onDateSelected(state.today) }, enabled = !state.isBusy,
+                                modifier = Modifier.widthIn(max = 128.dp)) { Text("Volver a hoy") }
+                        }
                         session.routineDescription?.takeIf { it.isNotBlank() }?.let {
                             Text(it, style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                    }
-                }
-                if (state.selectedDate == state.today) {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                        TextButton(
-                            onClick = onChangeRoutine, enabled = editable && !state.pendingSeries,
-                        ) { Text("Cambiar rutina") }
                     }
                 }
             }
@@ -238,18 +257,26 @@ private fun WorkoutExerciseCard(
                                 onValueChange = { onEditSeries(exercise.id, number, null, it) },
                             )
                         }
-                        if (input.saving || input.dirty) Text(
-                            if (input.saving) "Guardando…" else "Sin guardar",
+                        if (input.saving) Text(
+                            "Guardando…",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         input.error?.let {
                             Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-                            if (editable) TextButton(onClick = { onRetrySeries(exercise.id, number) }) { Text("Reintentar") }
                         }
-                        if (editable && input.dirty && !input.saving && !input.uncertain) TextButton(
-                            onClick = { onDiscardSeriesEdit(exercise.id, number) },
-                        ) { Text("Descartar edición", style = MaterialTheme.typography.labelSmall) }
+                        if (editable && (input.error != null || (input.dirty && !input.saving && !input.uncertain))) {
+                            Row {
+                                if (input.error != null) IconButton(
+                                    onClick = { onRetrySeries(exercise.id, number) },
+                                    modifier = Modifier.semantics { contentDescription = "Reintentar guardado de la serie $number" },
+                                ) { Text("↻", color = MaterialTheme.colorScheme.primary) }
+                                if (input.dirty && !input.saving && !input.uncertain) IconButton(
+                                    onClick = { onDiscardSeriesEdit(exercise.id, number) },
+                                    modifier = Modifier.semantics { contentDescription = "Descartar edición de la serie $number" },
+                                ) { Text("↶", color = MaterialTheme.colorScheme.primary) }
+                            }
+                        }
                     }
                 }
             }

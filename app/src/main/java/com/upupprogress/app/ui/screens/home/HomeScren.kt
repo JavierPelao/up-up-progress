@@ -5,8 +5,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -95,50 +94,13 @@ private fun WorkoutTodayCard(
 
 @Composable
 private fun QuickActionsSection(onRegisterFood: () -> Unit, modifier: Modifier = Modifier) {
-    var selectedAction by rememberSaveable { mutableStateOf<String?>(null) }
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(IntrinsicSize.Min),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        QuickActionCard(
-            symbol = "+",
-            title = "Registrar alimento",
-            subtitle = "Escanear código",
-            onClick = onRegisterFood,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-        )
-        QuickActionCard(
-            symbol = "↗",
-            title = "Registrar peso",
-            subtitle = "Ver tu evolución",
-            onClick = { selectedAction = "Registrar peso" },
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-        )
-    }
-
-    selectedAction?.let { action ->
-        AlertDialog(
-            onDismissRequest = { selectedAction = null },
-            title = { Text(action) },
-            text = {
-                Text(
-"Próximamente podrás registrar tu peso y consultar tu evolución."
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { selectedAction = null }) {
-                    Text("Entendido")
-                }
-            }
-        )
-    }
+    QuickActionCard(
+        symbol = "+",
+        title = "Registrar alimento",
+        subtitle = "Escanear código",
+        onClick = onRegisterFood,
+        modifier = modifier.fillMaxWidth(),
+    )
 }
 
 @Composable

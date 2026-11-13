@@ -22,7 +22,7 @@ fun TrainingFlow(state: TrainingUiState, viewModel: TrainingViewModel, modifier:
             onRetrySelection = viewModel::retrySelection, modifier = modifier,
         )
         TrainingPage.WORKOUT -> WorkoutScreen(
-            state = state, onChangeRoutine = viewModel::changeRoutine,
+            state = state, onChangeRoutine = { viewModel.changeRoutine(progressConfirmed = true) },
             onEditSeries = { id, number, weight, reps -> viewModel.editSeries(id, number, weight, reps) },
             onRetrySeries = { id, number -> viewModel.saveSeries(id, number) },
             onDiscardSeriesEdit = viewModel::discardSeriesEdit,

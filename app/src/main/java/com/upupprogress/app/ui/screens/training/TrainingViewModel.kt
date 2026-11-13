@@ -92,7 +92,7 @@ class TrainingViewModel internal constructor(
             runCatching { LocalDate.parse(it) }.getOrNull()?.takeIf { it <= todayDate() }
         } else null
         val inputs = if (sameOwner) restored<Map<String, TrainingSeriesInput>>("trainingInputs").orEmpty().mapValues { (_, v) ->
-            v.copy(saving = false, error = if (v.dirty) "Sin guardar. Pulsa Reintentar." else null)
+            v.copy(saving = false, error = if (v.dirty) "Hay una edición pendiente de confirmar." else null)
         } else emptyMap()
         mutableState.value = TrainingUiState(
             selectedDate = date ?: todayDate(), today = todayDate(),
@@ -394,8 +394,11 @@ class TrainingViewModel internal constructor(
         persist()
     }
 
-    fun changeRoutine() {
+    private var acknowledgedChangeSession: WorkoutSession? = null
+
+    fun changeRoutine(progressConfirmed: Boolean = false) {
         if (mutableState.value.isBusy || mutableState.value.pendingSeries || mutableState.value.selectionRequest != null) return
+        acknowledgedChangeSession = if (progressConfirmed) mutableState.value.activeSession else null
         mutableState.value = mutableState.value.copy(page = TrainingPage.LIBRARY, changingRoutine = true)
         persist()
     }
@@ -407,7 +410,8 @@ class TrainingViewModel internal constructor(
         if (routine.exercises.isEmpty()) return
         val previous = state.activeSession
         if (previous?.routineId == id) { openSession(previous.id); return }
-        if (previous != null && previous.hasRecordedData) {
+        if (previous != null && previous.hasRecordedData &&
+            !(state.changingRoutine && previous == acknowledgedChangeSession)) {
             mutableState.value = state.copy(confirmRoutineId = id)
         } else choose(id, previous?.id)
     }
@@ -485,7 +489,11 @@ class TrainingViewModel internal constructor(
             val weight = parseTrainingWeight(input.weight)
             val reps = input.reps.toIntOrNull()?.takeIf { it in 0..TrainingInputLimits.MAX_REPS }
             if (weight == null || reps == null) {
-                updateInput(key, input.copy(error = if (weight == null) "Peso inválido: usa hasta dos decimales." else "Ingresa repeticiones entre 0 y ${TrainingInputLimits.MAX_REPS}."))
+                updateInput(key, input.copy(error = when {
+                    weight == null -> "Peso inválido: usa hasta dos decimales."
+                    input.reps.isNotBlank() -> "Repeticiones inválidas."
+                    else -> null
+                }))
                 return@launch
             }
             updateInput(key, input.copy(saving = true))

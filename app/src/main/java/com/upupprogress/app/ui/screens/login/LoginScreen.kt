@@ -59,7 +59,6 @@ fun LoginScreen(
     onSignIn: (email: String, password: String) -> Unit,
     onForgotPassword: () -> Unit,
     onCreateAccount: () -> Unit,
-    onPreviewHome: () -> Unit,
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
     errorMessage: String? = null
@@ -157,11 +156,6 @@ fun LoginScreen(
                     modifier = Modifier.semantics { heading() },
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    text = "Inicia sesión y sigue avanzando hacia tu objetivo.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
@@ -291,23 +285,6 @@ fun LoginScreen(
                 }
             }
 
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = "Conoce cómo se verá tu progreso",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                TextButton(
-                    onClick = { leaveForm(onPreviewHome) },
-                    enabled = !isLoading
-                ) {
-                    Text("Ver Inicio de ejemplo →")
-                }
-            }
         }
     }
 }
@@ -321,7 +298,6 @@ private fun LoginPreview() {
             onSignIn = { _, _ -> },
             onForgotPassword = {},
             onCreateAccount = {},
-            onPreviewHome = {}
         )
     }
 }

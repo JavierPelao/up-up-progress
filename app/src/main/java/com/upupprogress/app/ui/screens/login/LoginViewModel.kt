@@ -25,7 +25,8 @@ private const val TIMEOUT_MESSAGE = "La conexión tardó demasiado. Inténtalo d
 data class LoginUiState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val isAuthenticated: Boolean = false
+    val isAuthenticated: Boolean = false,
+    val isRestoringSession: Boolean = false,
 )
 
 class LoginViewModel : ViewModel() {
@@ -38,20 +39,23 @@ class LoginViewModel : ViewModel() {
         operationState
     ) { sessionStatus, operation ->
         LoginUiState(
-            isLoading = operation.isLoading,
+            isLoading = operation.isLoading || (sessionStatus is SessionStatus.Initializing || sessionStatus is SessionStatus.RefreshFailure),
             errorMessage = operation.errorMessage
                 ?: if (sessionStatus is SessionStatus.RefreshFailure) {
-                    "No se pudo renovar tu sesión. Vuelve a iniciar sesión."
+                    "No se pudo renovar tu sesión. Revisa tu conexión; volveremos a intentarlo automáticamente."
                 } else {
                     null
                 },
-            isAuthenticated = sessionStatus is SessionStatus.Authenticated
+            isAuthenticated = sessionStatus is SessionStatus.Authenticated,
+            isRestoringSession = (sessionStatus is SessionStatus.Initializing || sessionStatus is SessionStatus.RefreshFailure),
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
         initialValue = LoginUiState(
-            isAuthenticated = repository.sessionStatus.value is SessionStatus.Authenticated
+            isAuthenticated = repository.sessionStatus.value is SessionStatus.Authenticated,
+            isLoading = (repository.sessionStatus.value is SessionStatus.Initializing || repository.sessionStatus.value is SessionStatus.RefreshFailure),
+            isRestoringSession = (repository.sessionStatus.value is SessionStatus.Initializing || repository.sessionStatus.value is SessionStatus.RefreshFailure),
         )
     )
 

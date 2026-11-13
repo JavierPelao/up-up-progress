@@ -9,6 +9,7 @@ import com.upupprogress.app.ui.screens.training.TrainingPage
 import com.upupprogress.app.ui.screens.profile.ProfileScreen
 import com.upupprogress.app.ui.screens.progress.ProgressScreen
 import com.upupprogress.app.ui.screens.progress.ProgressViewModel
+import com.upupprogress.app.ui.screens.progress.StrengthProgressViewModel
 import com.upupprogress.app.ui.components.AppHeader
 import com.upupprogress.app.ui.components.AppBottomBar
 import com.upupprogress.app.ui.components.AppDestination
@@ -39,6 +40,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -54,6 +60,7 @@ class MainActivity : ComponentActivity() {
     private val registrationViewModel: RegistrationViewModel by viewModels()
     private val foodDiaryViewModel: FoodDiaryViewModel by viewModels()
     private val progressViewModel: ProgressViewModel by viewModels()
+    private val strengthProgressViewModel: StrengthProgressViewModel by viewModels()
     private val trainingViewModel: TrainingViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -65,6 +72,7 @@ class MainActivity : ComponentActivity() {
                 val registrationState by registrationViewModel.uiState.collectAsStateWithLifecycle()
                 val foodState by foodDiaryViewModel.uiState.collectAsStateWithLifecycle()
                 val progressState by progressViewModel.uiState.collectAsStateWithLifecycle()
+                val strengthState by strengthProgressViewModel.uiState.collectAsStateWithLifecycle()
                 val trainingState by trainingViewModel.uiState.collectAsStateWithLifecycle()
                 val canEnterHome = loginState.isAuthenticated &&
                     registrationState.setupPhase == AccountSetupPhase.COMPLETE && !registrationState.showSavedConfirmation
@@ -100,7 +108,8 @@ class MainActivity : ComponentActivity() {
                     else selectedDestination = AppDestination.HOME
                 }
 
-                LaunchedEffect(loginState.isAuthenticated) {
+                LaunchedEffect(loginState.isAuthenticated, loginState.isRestoringSession) {
+                    if (loginState.isRestoringSession) return@LaunchedEffect
                     if (loginState.isAuthenticated) {
                         registrationViewModel.onAuthenticated()
                         showRegistration = false
@@ -114,21 +123,30 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                LaunchedEffect(canEnterHome, registrationState.savedStatus?.userId) {
+                LaunchedEffect(canEnterHome, registrationState.savedStatus?.userId, loginState.isRestoringSession) {
                     if (canEnterHome) {
                         val userId = requireNotNull(registrationState.savedStatus?.userId)
                         foodDiaryViewModel.activate(userId)
                         progressViewModel.activate(userId)
+                        strengthProgressViewModel.activate(userId)
                         trainingViewModel.activate(userId)
-                    } else if (!loginState.isAuthenticated) {
+                    } else if (!loginState.isAuthenticated && !loginState.isRestoringSession) {
                         foodDiaryViewModel.clear()
                         progressViewModel.clear()
+                        strengthProgressViewModel.clear()
                         trainingViewModel.clear()
+                    }
+                }
+                LaunchedEffect(canEnterHome, selectedDestination, showProfile, registrationState.savedStatus?.userId) {
+                    if (canEnterHome && selectedDestination == AppDestination.PROGRESS && !showProfile) {
+                        strengthProgressViewModel.activate(requireNotNull(registrationState.savedStatus?.userId))
+                        strengthProgressViewModel.refresh()
                     }
                 }
                 if (canEnterHome) ObserveFoodDate {
                     foodDiaryViewModel.onClockChanged()
                     trainingViewModel.onClockChanged()
+                    if (selectedDestination == AppDestination.PROGRESS && !showProfile) strengthProgressViewModel.onClockChanged()
                 }
 
                 LaunchedEffect(loginState.isAuthenticated, loginState.errorMessage) {
@@ -188,7 +206,16 @@ class MainActivity : ComponentActivity() {
                         .padding(innerPadding)
                         .consumeWindowInsets(innerPadding)
 
-                    if (loginState.isAuthenticated && !canEnterHome) {
+                    if (loginState.isRestoringSession) {
+                        Column(
+                            screenModifier.fillMaxSize().padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+                        ) {
+                            CircularProgressIndicator()
+                            loginState.errorMessage?.let { Text(it) }
+                        }
+                    } else if (loginState.isAuthenticated && !canEnterHome) {
                         AccountSetupScreen(
                             state = registrationState, email = registrationViewModel.authenticatedEmail,
                             onComplete = registrationViewModel::completeProfile,
@@ -248,6 +275,15 @@ class MainActivity : ComponentActivity() {
                                             state = progressState,
                                             onAnalyze = progressViewModel::analyze,
                                             onDismissResult = progressViewModel::dismissResult,
+                                            strengthState = strengthState,
+                                            onStrengthExerciseSelected = strengthProgressViewModel::selectExercise,
+                                            onStrengthPeriodSelected = strengthProgressViewModel::selectPeriod,
+                                            onStrengthPointSelected = strengthProgressViewModel::selectPoint,
+                                            onStrengthPointDismiss = strengthProgressViewModel::dismissPoint,
+                                            onStrengthRefresh = strengthProgressViewModel::refresh,
+                                            onWeightSelected = strengthProgressViewModel::selectWeight,
+                                            onRepetitionsPointSelected = strengthProgressViewModel::selectRepetitionsPoint,
+                                            onRepetitionsPointDismiss = strengthProgressViewModel::dismissRepetitionsPoint,
                                             modifier = screenModifier,
                                         )
                                 }
@@ -281,11 +317,6 @@ class MainActivity : ComponentActivity() {
                                 registrationViewModel.reset()
                                 showRegistration = true
                             },
-                            onPreviewHome = {
-                                showPendingFeature(
-                                    "Inicia sesión para acceder al menú principal."
-                                )
-                            }
                         )
                     }
                 }

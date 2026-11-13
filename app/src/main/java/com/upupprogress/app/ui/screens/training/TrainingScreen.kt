@@ -82,7 +82,7 @@ fun TrainingScreen(
             }
         }
         if (state.pendingSeries) item {
-            Text("Hay series sin guardar o pendientes de confirmar. Abre el entrenamiento para revisarlas.",
+            Text("Hay series pendientes de confirmar. Abre el entrenamiento para revisarlas.",
                 color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp))
         }
         if (state.selectedDate != state.today && !state.isLoading) {
@@ -268,7 +268,8 @@ private fun RoutineSelectionCard(
 /** Conserva el selector semanal y el calendario existentes, también durante el entrenamiento. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun TrainingDateHeader(selectedDate: LocalDate, today: LocalDate, onDateSelected: (LocalDate) -> Unit) {
+internal fun TrainingDateHeader(selectedDate: LocalDate, today: LocalDate, onDateSelected: (LocalDate) -> Unit,
+    showReturnToToday: Boolean = true) {
     var calendarOpen by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         NutritionWeekSelector(
@@ -276,7 +277,7 @@ internal fun TrainingDateHeader(selectedDate: LocalDate, today: LocalDate, onDat
             onDateSelected = onDateSelected,
             onOpenCalendar = { calendarOpen = true },
         )
-        if (selectedDate != today) {
+        if (showReturnToToday && selectedDate != today) {
             TextButton(onClick = { onDateSelected(today) }) { Text("Volver a hoy") }
         }
     }
